@@ -116,9 +116,11 @@ class FridgeApi:
         _LOGGER.debug("Attempting to connect...")
         try:
             await self._client.connect()
+            _LOGGER.warning("Connection successful.")
+            _LOGGER.debug("Start notify.")
             await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
-            _LOGGER.debug("Connection successful.")
             self._bind_event.clear()
+            _LOGGER.debug("Send pairing request.")
             await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
             await asyncio.wait_for(self._bind_event.wait(), timeout=20)
             _LOGGER.debug("Bind successful.")
