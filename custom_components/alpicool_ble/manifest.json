@@ -25,7 +25,11 @@
     {
       "service_uuid": "00001234-0000-1000-8000-00805f9b34fb",
       "local_name": "AK3-*"
-    },    
+    },
+    {
+      "service_uuid": "00001234-0000-1000-8000-00805f9b34fb",
+      "local_name": "WT-0001*"
+    },
     {
       "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb",
       "local_name": "WT-0001*"
