@@ -29,6 +29,8 @@ class FridgeApi:
         self._client = BleakClient(self._address, timeout=20.0)
         # Default to the most common method (write without response)
         self._write_requires_response = False
+        # Buffer for reassembling fragmented packets
+        self._notification_buffer = bytearray()
 
     def _checksum(self, data: bytes) -> int:
         """Calculate 2-byte big endian checksum."""
@@ -85,25 +87,45 @@ class FridgeApi:
             _LOGGER.error(f"Failed to decode status payload (length {len(payload)}): {e}")
 
     def _notification_handler(self, sender, data: bytearray):
-        """Handle notifications, capable of parsing multiple concatenated packets."""
-        _LOGGER.debug(f"<-- RECEIVED RAW from {sender}: {data.hex()}")
-        buffer = data
-        while buffer:
-            start_index = buffer.find(b'\xfe\xfe')
-            if start_index == -1: return
-            if start_index > 0: buffer = buffer[start_index:]
-            if len(buffer) < 4: return
-            end_index = -1
-            try: end_index = buffer.index(b'\xfe\xfe', 2)
-            except ValueError: pass
-            current_packet = buffer[:end_index] if end_index != -1 else buffer
-            buffer = buffer[end_index:] if end_index != -1 else bytearray()
-            _LOGGER.debug(f"Processing single packet: {current_packet.hex()}")
-            packet_len_byte = current_packet[2]
-            if len(current_packet) < packet_len_byte + 3: continue
+        """Handle notifications, reassembling fragmented packets before parsing."""
+        _LOGGER.debug(f"<-- RECEIVED CHUNK from {sender}: {data.hex()}")
+        self._notification_buffer.extend(data)
+
+        while self._notification_buffer:
+            start_index = self._notification_buffer.find(b'\xfe\xfe')
+            if start_index == -1:
+                _LOGGER.warning(f"No packet header in buffer, clearing: {self._notification_buffer.hex()}")
+                self._notification_buffer.clear()
+                return
+
+            if start_index > 0:
+                _LOGGER.debug(f"Discarding preamble: {self._notification_buffer[:start_index].hex()}")
+                self._notification_buffer = self._notification_buffer[start_index:]
+
+            if len(self._notification_buffer) < 3:
+                _LOGGER.debug("Buffer too short for length byte, waiting for more data.")
+                return
+
+            # The length byte is the length of the rest of the packet (cmd + payload + checksum)
+            packet_len_byte = self._notification_buffer[2]
+            expected_total_len = 3 + packet_len_byte
+            
+            if len(self._notification_buffer) < expected_total_len:
+                _LOGGER.debug(f"Incomplete packet. Have {len(self._notification_buffer)}, need {expected_total_len}. Waiting for more data.")
+                return
+
+            # We have a full packet
+            current_packet = self._notification_buffer[:expected_total_len]
+            self._notification_buffer = self._notification_buffer[expected_total_len:]
+            
+            _LOGGER.debug(f"Reassembled and processing full packet: {current_packet.hex()}")
+
             cmd = current_packet[3]
+            # The payload is everything after the command byte.
+            # The length of the checksum is inconsistent, so we let the decoders handle the payload.
+            payload = current_packet[4:]
+
             if cmd == Request.QUERY:
-                payload = current_packet[4:-2 if packet_len_byte > 3 else -1]
                 self._decode_status(payload)
                 self._status_updated_event.set()
             elif cmd == Request.BIND:
@@ -160,8 +182,13 @@ class FridgeApi:
         # Step 2: Try to bind. This is optional and can fail.
         try:
             self._bind_event.clear()
-            await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
-            await asyncio.wait_for(self._bind_event.wait(), timeout=20)
+            # The BIND command appears to be fire-and-forget on all models.
+            # We send it without requiring a response to avoid deadlocking on certain fridge firmwares.
+            bind_packet = self._build_packet(Request.BIND, b"\x01")
+            _LOGGER.debug(f"--> SENDING BIND (always without response): {bind_packet.hex()}")
+            await self._client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, bind_packet, response=False)
+            
+            await asyncio.wait_for(self._bind_event.wait(), timeout=10)
             _LOGGER.debug("Bind successful.")
         except asyncio.TimeoutError:
             _LOGGER.warning("Bind command timed out. Proceeding without binding. This may work for some models.")
