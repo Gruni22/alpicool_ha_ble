@@ -1,6 +1,3 @@
-# known Bugs:
-- negative temps
-
 # Alpicool BLE Integration for Home Assistant
 
 This is a Home Assistant Custom Component to control Alpicool portable fridges via Bluetooth Low Energy (BLE).
