@@ -84,7 +84,7 @@ class FridgeApi:
 
     def _notification_handler(self, sender, data: bytearray):
         """Handle notifications, capable of parsing multiple concatenated packets."""
-        _LOGGER.debug(f"<-- RECEIVED RAW: {data.hex()}")
+        _LOGGER.debug(f"<-- RECEIVED RAW from {sender}: {data.hex()}")
         buffer = data
         while buffer:
             start_index = buffer.find(b'\xfe\xfe')
@@ -115,27 +115,61 @@ class FridgeApi:
         """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect...")
         try:
-            # Establish the base BLE connection
+            # Step 1: Establish base connection. This must succeed.
             if not self._client.is_connected:
                 await self._client.connect()
-                await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
-            _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
-
-            # Try the BIND process with a timeout
-            try:
-                self._bind_event.clear()
-                await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
-                await asyncio.wait_for(self._bind_event.wait(), timeout=20) # 10 second timeout for bind
-                _LOGGER.debug("Bind successful.")
-            except asyncio.TimeoutError:
-                _LOGGER.warning("Bind command timed out. Proceeding without binding. This may work for some models.")
             
-            # As long as the base connection is up, we return True.
-            return True
+            # Step 1a: UUID Parser - Discover and validate services and characteristics
+            _LOGGER.debug("Discovering services and characteristics...")
+            discovered_char_uuids = {char.uuid.lower() for service in self._client.services for char in service.characteristics}
+            for service in self._client.services:
+                _LOGGER.debug(f"  [Service] {service.uuid}")
+                for char in service.characteristics:
+                    _LOGGER.debug(f"    [Characteristic] {char.uuid} | Properties: {char.properties}")
+
+            required_uuids = {FRIDGE_RW_CHARACTERISTIC_UUID.lower(), FRIDGE_NOTIFY_UUID.lower()}
+            if not required_uuids.issubset(discovered_char_uuids):
+                _LOGGER.error(
+                    "Device is missing required characteristics. "
+                    f"Found: {discovered_char_uuids}. Required: {required_uuids}"
+                )
+                await self.disconnect()
+                return False
+            _LOGGER.debug("All required characteristics found.")
+            
+            # Step 1b: Try to start notifications.
+            _LOGGER.debug(f"Attempting to start notifications on {FRIDGE_NOTIFY_UUID}...")
+            try:
+                await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
+                _LOGGER.debug("Successfully started notifications.")
+            except Exception as e:
+                _LOGGER.error(f"Failed to start notifications: {e}. This may be a permissions issue or the characteristic may not exist.")
+                await self.disconnect()
+                return False
 
         except Exception as e:
             _LOGGER.error(f"Failed to establish base BLE connection: {e}")
             await self.disconnect()
+            return False
+
+        _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
+
+        # Step 2: Try to bind. This is optional and can fail.
+        try:
+            self._bind_event.clear()
+            await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
+            await asyncio.wait_for(self._bind_event.wait(), timeout=20)
+            _LOGGER.debug("Bind successful.")
+        except asyncio.TimeoutError:
+            _LOGGER.warning("Bind command timed out. Proceeding without binding. This may work for some models.")
+        except Exception as e:
+            _LOGGER.warning(f"An error occurred during bind, proceeding without it: {e}")
+
+        # Step 3: Final check. No matter what happened during bind, is the client still connected?
+        if self._client.is_connected:
+            return True
+        else:
+            _LOGGER.error("Connection is not active after connect attempt.")
             return False
 
     async def disconnect(self):
