@@ -9,7 +9,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import FridgeApi
-from .const import DOMAIN
+from .const import DOMAIN, Request
 from .models import AlpicoolEntity, build_set_other_payload
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,9 +42,9 @@ class AlpicoolLockSwitch(AlpicoolEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the lock on."""
         payload = build_set_other_payload(self.api.status, {"locked": True})
-        await self.api._send_raw(self.api._build_packet(self.api.Request.SET_OTHER, payload))
+        await self.api._send_raw(self.api._build_packet(Request.SET_OTHER, payload))
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the lock off."""
         payload = build_set_other_payload(self.api.status, {"locked": False})
-        await self.api._send_raw(self.api._build_packet(self.api.Request.SET_OTHER, payload))
+        await self.api._send_raw(self.api._build_packet(Request.SET_OTHER, payload))
