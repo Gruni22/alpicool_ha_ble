@@ -31,36 +31,29 @@ class FridgeApi:
     def _checksum(self, data: bytes) -> int:
         """Calculate 2-byte big endian checksum."""
         return sum(data) & 0xFFFF
-
+    
     def _build_packet(self, cmd: int, data: bytes = b"") -> bytes:
         """Build a BLE command packet based on known working examples and protocol quirks."""
         if cmd == Request.BIND:
             return b"\xFE\xFE\x03\x00\x01\xFF"
         if cmd == Request.QUERY:
             return b"\xFE\xFE\x03\x01\x02\x00"
-
-        if cmd in [Request.SET_LEFT, Request.SET_RIGHT]:
-            header = b"\xFE\xFE"
-            length = 3
-            packet = bytearray(header)
-            packet.append(length)
-            packet.append(cmd)
-            packet.extend(data)
-            checksum = sum(packet) & 0xFF
-            packet.append(checksum)
-            _LOGGER.debug(f"Built special-case packet for cmd {cmd}: {packet.hex()}")
-            return bytes(packet)
-
-        _LOGGER.debug(f"Using dynamic builder for complex cmd {cmd}")
+        
+        _LOGGER.debug(f"Using dynamic builder for cmd {cmd}")
+        
         header = b"\xFE\xFE"
         payload = bytearray([cmd])
         payload.extend(data)
+        
         length = len(payload) + 2
+        
         packet = bytearray(header)
         packet.append(length)
         packet.extend(payload)
+        
         checksum = self._checksum(packet)
         packet.extend(checksum.to_bytes(2, "big"))
+        
         _LOGGER.debug(f"Dynamically built packet for cmd {cmd}: {packet.hex()}")
         return bytes(packet)
 

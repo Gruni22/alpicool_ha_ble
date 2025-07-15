@@ -11,6 +11,7 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import FridgeApi
@@ -28,7 +29,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     
     entities = [AlpicoolClimateZone(entry, api, "left")]
     
-    # Only add the right zone if the device reported data for it
     if "right_current" in api.status:
         _LOGGER.info("Dual-zone fridge detected, adding right zone entity.")
         entities.append(AlpicoolClimateZone(entry, api, "right"))
@@ -36,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     async_add_entities(entities)
 
 class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
-    """Representation of an Alpicool refrigerator zone as a Climate entity."""
+    """Representation of an Alpicool refrigerator zone."""
 
     _attr_hvac_modes = [HVACMode.COOL, HVACMode.OFF]
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
@@ -58,8 +58,6 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode | None:
         """Return hvac operation."""
-        if not self.available:
-            return None
         return HVACMode.COOL if self.api.status.get("powered_on") else HVACMode.OFF
 
     @property
@@ -75,15 +73,23 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def preset_mode(self) -> str | None:
         """Return the current preset mode."""
-        if not self.available:
-            return None
         return PRESET_ECO if self.api.status.get("run_mode") == 1 else PRESET_MAX
+
+    async def _send_and_update(self, packet: bytes):
+        """Send a command, wait briefly, and trigger a status update for all entities."""
+        await self.api._send_raw(packet)
+        # Give the fridge a moment to process the command before querying its new state
+        await asyncio.sleep(0.5)
+        await self.api.update_status()
+        # Tell all related entities to update their state from the new api.status
+        async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
         payload = build_set_other_payload(self.api.status, {"powered_on": is_on})
-        await self.api._send_raw(self.api._build_packet(Request.SET_OTHER, payload))
+        packet = self.api._build_packet(Request.SET_OTHER, payload)
+        await self._send_and_update(packet)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
@@ -91,10 +97,11 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
             temp = int(kwargs[ATTR_TEMPERATURE])
             cmd = Request.SET_LEFT if self._zone == "left" else Request.SET_RIGHT
             packet = self.api._build_packet(cmd, bytes([temp & 0xFF]))
-            await self.api._send_raw(packet)
+            await self._send_and_update(packet)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         is_eco = preset_mode == PRESET_ECO
         payload = build_set_other_payload(self.api.status, {"run_mode": 1 if is_eco else 0})
-        await self.api._send_raw(self.api._build_packet(Request.SET_OTHER, payload))
+        packet = self.api._build_packet(Request.SET_OTHER, payload)
+        await self._send_and_update(packet)
