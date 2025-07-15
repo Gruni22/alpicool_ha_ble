@@ -1,5 +1,4 @@
 """The Alpicool BLE integration."""
-import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -25,11 +24,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     address = entry.data["address"]
     
-    # Create and store the API object
     api = FridgeApi(address)
     hass.data[DOMAIN][entry.entry_id] = api
 
-    # Connect and get initial status to determine device type (single/dual zone)
     try:
         if not await api.connect():
             raise ConfigEntryNotReady(f"Could not connect to Alpicool device at {address}")
@@ -38,14 +35,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await api.disconnect()
         raise ConfigEntryNotReady(f"Failed to initialize Alpicool device at {address}: {e}") from e
 
-    # Forward setup to all platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Start background polling task
-    entry.async_on_unload(
-        hass.loop.create_task(api.start_polling(
-            lambda: async_dispatcher_send(hass, f"{DOMAIN}_{address}_update")
-        )).cancel
+    # Use the modern way to create a background task
+    entry.async_create_background_task(
+        hass,
+        api.start_polling(lambda: async_dispatcher_send(hass, f"{DOMAIN}_{address}_update")),
+        name="alpicool_ble_poll"
     )
 
     return True
