@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigFlow
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_DUAL_ZONE_MODES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is None:
             data_schema = vol.Schema({
                 vol.Optional(CONF_NAME, default=self._discovery_info.name): str,
+                vol.Optional(CONF_DUAL_ZONE_MODES, default=False): bool,
             })
 
             return self.async_show_form(
@@ -64,5 +65,7 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
             data={
                 CONF_ADDRESS: self._discovery_info.address,
                 CONF_NAME: name,
+                # Store the user's choice in the config entry
+                CONF_DUAL_ZONE_MODES: user_input[CONF_DUAL_ZONE_MODES],
             },
         )
