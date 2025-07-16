@@ -6,9 +6,14 @@ DOMAIN = "alpicool_ble"
 FRIDGE_RW_CHARACTERISTIC_UUID = "00001235-0000-1000-8000-00805f9b34fb"
 FRIDGE_NOTIFY_UUID = '00001236-0000-1000-8000-00805f9b34fb'
 
+# --- Configuration Options ---
+CONF_DUAL_ZONE_MODES = "dual_zone_modes"
+
 # --- Presets ---
 PRESET_ECO = "Eco"
 PRESET_MAX = "Max"
+PRESET_FRIDGE = "Fridge"
+PRESET_FREEZER = "Freezer"
 
 class Request:
     BIND = 0x00
