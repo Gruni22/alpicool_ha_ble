@@ -85,7 +85,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
         payload = build_set_other_payload(self.api.status, {"powered_on": is_on})
-        packet = self.api._build_packet(Request.SET_OTHER, payload)
+        packet = self.api._build_packet(Request.SET, payload)
         await self._send_and_update(packet)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
@@ -100,5 +100,5 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         """Set new preset mode."""
         is_eco = preset_mode == PRESET_ECO
         payload = build_set_other_payload(self.api.status, {"run_mode": 1 if is_eco else 0})
-        packet = self.api._build_packet(Request.SET_OTHER, payload)
+        packet = self.api._build_packet(Request.SET, payload)
         await self._send_and_update(packet)
