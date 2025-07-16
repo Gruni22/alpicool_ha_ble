@@ -57,5 +57,5 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
         bat_saver_value = BATTERY_SAVER_MAP.get(option)
         
         payload = build_set_other_payload(self.api.status, {"bat_saver": bat_saver_value})
-        packet = self.api._build_packet(Request.SET_OTHER, payload)
+        packet = self.api._build_packet(Request.SET, payload)
         await self.api._send_raw(packet)
