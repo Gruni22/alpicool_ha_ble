@@ -8,7 +8,7 @@
   "issue_tracker": "https://github.com/Gruni22/alpicool_ha_ble/issues",
   "requirements": ["bleak"],
   "dependencies": [],
-  "version": "3.0.2-dev",
+  "version": "3.0.2",
   "bluetooth": [
     {
       "service_uuid": "00001234-0000-1000-8000-00805f9b34fb"
