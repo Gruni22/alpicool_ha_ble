@@ -72,4 +72,4 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         payload = build_set_other_payload(self.api.status, {self._number_key: int(value)})
-        await self.api._send_raw(self.api._build_packet(Request.SET_OTHER, payload))
+        await self.api._send_raw(self.api._build_packet(Request.SET, payload))
