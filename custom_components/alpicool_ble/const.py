@@ -1,5 +1,5 @@
 """Constants for the Alpicool BLE integration."""
-from enum import IntEnum
+from enum import IntEnum, Enum
 
 DOMAIN = "alpicool_ble"
 
@@ -9,8 +9,8 @@ FRIDGE_NOTIFY_UUID = '00001236-0000-1000-8000-00805f9b34fb'
 class Request:
     BIND = 0x00
     QUERY = 0x01
-    SET_OTHER = 0x02
-    RESET = 0x03
+    SET = 0x02
+    RESET = 0x04
     SET_LEFT = 0x05
     SET_RIGHT = 0x06
 
@@ -24,3 +24,8 @@ class BatteryProtection(IntEnum):
     LOW = 0
     MEDIUM = 1
     HIGH = 2
+
+# Presets
+class Preset(Enum):
+    ECO = "Eco"
+    MAX = "Max"
