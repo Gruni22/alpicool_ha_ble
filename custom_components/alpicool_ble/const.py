@@ -6,6 +6,10 @@ DOMAIN = "alpicool_ble"
 FRIDGE_RW_CHARACTERISTIC_UUID = "00001235-0000-1000-8000-00805f9b34fb"
 FRIDGE_NOTIFY_UUID = '00001236-0000-1000-8000-00805f9b34fb'
 
+# --- Presets ---
+PRESET_ECO = "Eco"
+PRESET_MAX = "Max"
+
 class Request:
     BIND = 0x00
     QUERY = 0x01
@@ -24,8 +28,3 @@ class BatteryProtection(IntEnum):
     LOW = 0
     MEDIUM = 1
     HIGH = 2
-
-# Presets
-class Preset(Enum):
-    ECO = "Eco"
-    MAX = "Max"
