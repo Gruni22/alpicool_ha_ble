@@ -7,9 +7,10 @@ import voluptuous as vol
 
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
+    async_ble_device_from_address,
 )
-from homeassistant.config_entries import ConfigFlow
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.config_entries import ConfigFlow, ConfigEntry, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN, CONF_DUAL_ZONE_MODES
@@ -34,38 +35,71 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle discovery via Bluetooth."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
-
         self._discovery_info = discovery_info
-        self.context["title_placeholders"] = {"name": discovery_info.name}
-        return await self.async_step_user()
+        return self.async_show_form(step_id="user")
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle the user step to finish setup."""
-        if not self._discovery_info:
-            return self.async_abort(reason="no_devices_found")
-
-        if user_input is None:
-            data_schema = vol.Schema({
-                vol.Optional(CONF_NAME, default=self._discovery_info.name): str,
-                vol.Optional(CONF_DUAL_ZONE_MODES, default=False): bool,
-            })
-
-            return self.async_show_form(
-                step_id="user",
-                description_placeholders=self.context.get("title_placeholders"),
-                data_schema=data_schema,
+        """Handle the user step to optionally enter a MAC address."""
+        errors = {}
+        if self._discovery_info:
+            return self.async_create_entry(
+                title=self._discovery_info.name, 
+                data={"address": self._discovery_info.address}
             )
 
-        name = user_input.get(CONF_NAME, self._discovery_info.name)
+        if user_input is not None:
+            address = user_input["address"]
+            # Prüfen, ob das Gerät mit dieser Adresse bekannt ist
+            if ble_device := async_ble_device_from_address(self.hass, address.upper(), True):
+                await self.async_set_unique_id(ble_device.address, raise_on_progress=False)
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=ble_device.name or address, 
+                    data={"address": ble_device.address}
+                )
+            
+            errors["base"] = "cannot_find_device"
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({
+                vol.Required("address"): str, # Nur noch die Adresse abfragen
+            }),
+            errors=errors,
+            description_placeholders={"docs_url": "https://www.home-assistant.io/integrations/bluetooth/"}
+        )
 
-        return self.async_create_entry(
-            title=name,
-            data={
-                CONF_ADDRESS: self._discovery_info.address,
-                CONF_NAME: name,
-                # Store the user's choice in the config entry
-                CONF_DUAL_ZONE_MODES: user_input[CONF_DUAL_ZONE_MODES],
-            },
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Get the options flow for this handler."""
+        return AlpicoolOptionsFlow(config_entry)
+
+
+class AlpicoolOptionsFlow(OptionsFlow):
+    """Handle an options flow for Alpicool BLE."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        # Hole den aktuellen Wert oder den Default
+        current_interval = self.config_entry.options.get("interval", 60)
+        current_dual_mode = self.config_entry.options.get(CONF_DUAL_ZONE_MODES, False)
+
+        return self.async_show_form(
+            step_id="init",
+             data_schema=vol.Schema({
+                vol.Required("interval", default=current_interval): vol.All(vol.Coerce(int), vol.Range(min=10)),
+                vol.Optional(CONF_DUAL_ZONE_MODES, default=current_dual_mode): bool,
+            }),
+            description_placeholders={"device_name": self.config_entry.title}
         )

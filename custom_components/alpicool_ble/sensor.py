@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import FridgeApi
+from .api import FridgeCoordinator
 from .const import DOMAIN
 from .models import AlpicoolEntity
 
@@ -40,7 +40,7 @@ SENSORS = {
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool sensor entities."""
-    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
+    api: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
         AlpicoolSensor(entry, api, sensor_key, sensor_def)
@@ -52,14 +52,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     """Representation of an Alpicool Sensor."""
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi, sensor_key: str, sensor_def: dict) -> None:
+    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator, sensor_key: str, sensor_def: dict) -> None:
         """Initialize the sensor."""
         super().__init__(entry, api)
         self._sensor_key = sensor_key
         self._sensor_def = sensor_def
 
         self._attr_unique_id = f"{self._address}_{self._sensor_key}"
-        self._attr_name = f"{entry.data['name']} {self._sensor_def['name']}"
+        self._attr_name = f"{entry.title} {self._sensor_def['name']}"
         self._attr_device_class = self._sensor_def.get("device_class")
         self._attr_native_unit_of_measurement = self._sensor_def.get("unit")
         self._attr_state_class = self._sensor_def.get("state_class")
@@ -68,8 +68,8 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        if not self.available or not self.api.status:
+        if not self.available or not self.api.data:
             return None
         
         value_fn: Callable = self._sensor_def["value_fn"]
-        return value_fn(self.api.status)
+        return value_fn(self.api.data)

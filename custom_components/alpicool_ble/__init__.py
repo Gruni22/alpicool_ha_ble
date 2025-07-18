@@ -1,13 +1,12 @@
 """The Alpicool BLE integration."""
+from datetime import timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .api import FridgeApi
+from .api import FridgeCoordinator
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,34 +21,35 @@ PLATFORMS: list[Platform] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Alpicool BLE from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    address = entry.data["address"]
-    
-    api = FridgeApi(address)
-    hass.data[DOMAIN][entry.entry_id] = api
+    address = entry.unique_id
+    assert address is not None
 
-    try:
-        if not await api.connect():
-            raise ConfigEntryNotReady(f"Could not connect to Alpicool device at {address}")
-        await api.update_status()
-    except Exception as e:
-        await api.disconnect()
-        raise ConfigEntryNotReady(f"Failed to initialize Alpicool device at {address}: {e}") from e
+    update_interval = entry.options.get("interval", 60)
+
+    coordinator = FridgeCoordinator(
+        hass=hass,
+        logger=_LOGGER,
+        address=address,
+        mode="active",
+        update_interval=timedelta(seconds=update_interval)
+    )
+
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Use the modern way to create a background task
-    entry.async_create_background_task(
-        hass,
-        api.start_polling(lambda: async_dispatcher_send(hass, f"{DOMAIN}_{address}_update")),
-        name="alpicool_ble_poll"
-    )
+    # Füge einen Listener hinzu, der auf Änderungen in den Optionen reagiert
+    entry.async_on_unload(entry.add_update_listener(options_update_listener))
 
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    api: FridgeApi = hass.data[DOMAIN].pop(entry.entry_id)
-    await api.disconnect()
-    
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+async def options_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Handle options update."""
+    # Diese Funktion wird aufgerufen, wenn der Benutzer das Intervall ändert.
+    # Die einfachste Methode ist, die Integration neu zu laden, um die neuen
+    # Einstellungen zu übernehmen.
+    await hass.config_entries.async_reload(entry.entry_id)
