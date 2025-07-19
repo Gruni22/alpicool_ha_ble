@@ -3,7 +3,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import DeviceInfo, Entity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .api import FridgeApi
+from .api import FridgeCoordinator
 from .const import DOMAIN
 
 
@@ -13,20 +13,21 @@ class AlpicoolEntity(Entity):
     _attr_should_poll = False
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi) -> None:
+    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator) -> None:
         """Initialize the entity."""
         self.api = api
-        self._address = entry.data["address"]
+        self._address = entry.unique_id
+        assert self._address is not None
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._address)},
-            name=entry.data["name"],
+            name=entry.title,
             manufacturer="Alpicool",
         )
 
     @property
     def available(self) -> bool:
         """Return True if the device is available."""
-        return bool(self.api.status)
+        return bool(self.api.data)
 
     async def async_added_to_hass(self) -> None:
         """Connect to events."""

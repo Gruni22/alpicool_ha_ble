@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .api import FridgeApi
+from .api import FridgeCoordinator
 from .const import DOMAIN, Request
 from .models import AlpicoolEntity, build_set_other_payload
 
@@ -34,7 +34,7 @@ NUMBERS = {
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool number entities."""
-    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
+    api: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
         AlpicoolNumber(entry, api, number_key, number_def)
@@ -48,14 +48,14 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi, number_key: str, number_def: dict) -> None:
+    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator, number_key: str, number_def: dict) -> None:
         """Initialize the number entity."""
         super().__init__(entry, api)
         self._number_key = number_key
         self._number_def = number_def
 
         self._attr_unique_id = f"{self._address}_{self._number_key}"
-        self._attr_name = f"{entry.data['name']} {self._number_def['name']}"
+        self._attr_name = f"{entry.title} {self._number_def['name']}"
         self._attr_native_min_value = self._number_def["min"]
         self._attr_native_max_value = self._number_def["max"]
         self._attr_native_step = self._number_def["step"]
@@ -67,9 +67,9 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
         """Return the state of the number entity."""
         if not self.available:
             return None
-        return self.api.status.get(self._number_key)
+        return self.api.data.get(self._number_key)
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        payload = build_set_other_payload(self.api.status, {self._number_key: int(value)})
-        await self.api._send_raw(self.api._build_packet(Request.SET, payload))
+        payload = build_set_other_payload(self.api.data, {self._number_key: int(value)})
+        await self.api.async_send_command(self.api._build_packet(Request.SET, payload))
