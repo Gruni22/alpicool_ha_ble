@@ -118,14 +118,15 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
         checksum = self._checksum(packet); packet.extend(checksum.to_bytes(2, "big"))
         return bytes(packet)
 
+    @staticmethod
     def _to_signed_byte(b: int) -> int:
         """Convert an unsigned byte (0-255) to a signed byte (-128-127)."""
         return b - 256 if b > 127 else b
 
     def _decode_status(self, payload: bytes) -> dict[str, Any]:
         try:
-            decoded_data = {"locked": bool(payload[0]), "powered_on": bool(payload[1]), "run_mode": payload[2], "bat_saver": payload[3], "left_target": self._to_signed_byte(payload[4]), "temp_max": self._to_signed_byte(payload[5]), "temp_min": self._to_signed_byte(payload[6]), "left_ret_diff": self._to_signed_byte(payload[7]), "start_delay": payload[8], "unit": payload[9], "left_tc_hot": self._to_signed_byte(payload[10]), "left_tc_mid": self._to_signed_byte(payload[11]), "left_tc_cold": self._to_signed_byte(payload[12]), "left_tc_halt": self._to_signed_byte(payload[13]), "left_current": self._to_signed_byte(payload[14]), "bat_percent": payload[15], "bat_vol_int": payload[16], "bat_vol_dec": payload[17]}
-            if len(payload) >= 28: decoded_data.update({"right_target": self._to_signed_byte(payload[18]), "right_ret_diff": self._to_signed_byte(payload[21]), "right_tc_hot": self._to_signed_byte(payload[22]), "right_tc_mid": self._to_signed_byte(payload[23]), "right_tc_cold": self._to_signed_byte(payload[24]), "right_tc_halt": self._to_signed_byte(payload[25]), "right_current": self._to_signed_byte(payload[26]), "running_status": payload[27]})
+            decoded_data = {"locked": bool(payload[0]), "powered_on": bool(payload[1]), "run_mode": payload[2], "bat_saver": payload[3], "left_target": FridgeCoordinator._to_signed_byte(payload[4]), "temp_max": FridgeCoordinator._to_signed_byte(payload[5]), "temp_min": FridgeCoordinator._to_signed_byte(payload[6]), "left_ret_diff": FridgeCoordinator._to_signed_byte(payload[7]), "start_delay": payload[8], "unit": payload[9], "left_tc_hot": FridgeCoordinator._to_signed_byte(payload[10]), "left_tc_mid": FridgeCoordinator._to_signed_byte(payload[11]), "left_tc_cold": FridgeCoordinator._to_signed_byte(payload[12]), "left_tc_halt": FridgeCoordinator._to_signed_byte(payload[13]), "left_current": FridgeCoordinator._to_signed_byte(payload[14]), "bat_percent": payload[15], "bat_vol_int": payload[16], "bat_vol_dec": payload[17]}
+            if len(payload) >= 28: decoded_data.update({"right_target": FridgeCoordinator._to_signed_byte(payload[18]), "right_ret_diff": FridgeCoordinator._to_signed_byte(payload[21]), "right_tc_hot": FridgeCoordinator._to_signed_byte(payload[22]), "right_tc_mid": FridgeCoordinator._to_signed_byte(payload[23]), "right_tc_cold": FridgeCoordinator._to_signed_byte(payload[24]), "right_tc_halt": FridgeCoordinator._to_signed_byte(payload[25]), "right_current": FridgeCoordinator._to_signed_byte(payload[26]), "running_status": payload[27]})
             return decoded_data
         except IndexError as e:
             _LOGGER.error(f"Failed to decode status payload (length {len(payload)}): {e}")
