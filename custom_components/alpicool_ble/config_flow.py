@@ -51,7 +51,6 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             address = user_input["address"]
-            # Prüfen, ob das Gerät mit dieser Adresse bekannt ist
             if ble_device := async_ble_device_from_address(self.hass, address.upper(), True):
                 await self.async_set_unique_id(ble_device.address, raise_on_progress=False)
                 self._abort_if_unique_id_configured()
@@ -64,7 +63,7 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required("address"): str, # Nur noch die Adresse abfragen
+                vol.Required("address"): str,
             }),
             errors=errors,
             description_placeholders={"docs_url": "https://www.home-assistant.io/integrations/bluetooth/"}
@@ -91,7 +90,6 @@ class AlpicoolOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Hole den aktuellen Wert oder den Default
         current_interval = self.config_entry.options.get("interval", 60)
         current_dual_mode = self.config_entry.options.get(CONF_DUAL_ZONE_MODES, False)
 
