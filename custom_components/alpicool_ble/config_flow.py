@@ -4,20 +4,25 @@ import logging
 from typing import Any
 
 import voluptuous as vol
+import re
 
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
 )
 from homeassistant.config_entries import ConfigFlow
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.const import CONF_ADDRESS, CONF_NAME
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN, CONF_DUAL_ZONE_MODES
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_NAME = "name"
-
+def normalize_ble_address(addr: str) -> str | None:
+    """Normalize BLE address to format XX:XX:XX:XX:XX:XX or return None if invalid."""
+    addr = addr.replace("-", "").replace(":", "").lower()
+    if len(addr) != 12 or not all(c in "0123456789abcdef" for c in addr):
+        return None
+    return ":".join(addr[i:i+2] for i in range(0, 12, 2)).upper()
 
 class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Alpicool BLE."""
@@ -43,29 +48,41 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the user step to finish setup."""
-        if not self._discovery_info:
-            return self.async_abort(reason="no_devices_found")
+        errors = {}
 
-        if user_input is None:
-            data_schema = vol.Schema({
-                vol.Optional(CONF_NAME, default=self._discovery_info.name): str,
-                vol.Optional(CONF_DUAL_ZONE_MODES, default=False): bool,
-            })
+        if user_input is not None:
+            raw_address = user_input.get(CONF_ADDRESS)
+            normalized_address = normalize_ble_address(raw_address)
 
-            return self.async_show_form(
-                step_id="user",
-                description_placeholders=self.context.get("title_placeholders"),
-                data_schema=data_schema,
-            )
+            if not normalized_address:
+                errors["base"] = "invalid_address"
+            else:
+                name = user_input.get(CONF_NAME, normalized_address)
+                await self.async_set_unique_id(normalized_address)
+                self._abort_if_unique_id_configured()
 
-        name = user_input.get(CONF_NAME, self._discovery_info.name)
+                return self.async_create_entry(
+            
+                    title=name,
+                    data={
+                        CONF_ADDRESS: normalized_address,
+                        CONF_NAME: name,
+                        CONF_DUAL_ZONE_MODES: user_input.get(CONF_DUAL_ZONE_MODES, False),
+                    },
+                )
 
-        return self.async_create_entry(
-            title=name,
-            data={
-                CONF_ADDRESS: self._discovery_info.address,
-                CONF_NAME: name,
-                # Store the user's choice in the config entry
-                CONF_DUAL_ZONE_MODES: user_input[CONF_DUAL_ZONE_MODES],
-            },
+        default_name = self._discovery_info.name if self._discovery_info else "Alpicool Fridge"
+        default_address = self._discovery_info.address if self._discovery_info else ""
+
+        data_schema = vol.Schema({
+            vol.Required(CONF_ADDRESS, default=default_address): str,
+            vol.Optional(CONF_NAME, default=default_name): str,
+            vol.Optional(CONF_DUAL_ZONE_MODES, default=False): bool,
+        })
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            errors=errors,
         )
+

@@ -1,5 +1,5 @@
 """Constants for the Alpicool BLE integration."""
-from enum import IntEnum, Enum
+from enum import IntEnum
 
 DOMAIN = "alpicool_ble"
 
