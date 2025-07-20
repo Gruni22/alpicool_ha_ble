@@ -45,16 +45,10 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
 
     @callback
     def _needs_poll_method(self, service_info: BluetoothServiceInfoBleak, last_poll_successful: bool) -> bool:
-        """
-        Return if the device needs polling.
-        This is the new, intelligent version.
-        """
+        """Return if the device needs polling."""
         return (
             self.hass.state == CoreState.RUNNING
-            and bluetooth.async_ble_device_from_address(
-                self.hass, service_info.device.address, connectable=True
-            )
-            is not None
+            and bluetooth.async_ble_device_from_address(self.hass, service_info.device.address, connectable=True) is not None
         )
 
     def _notification_handler(self, sender, data: bytearray):
@@ -99,7 +93,6 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
             await client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
             self._status_updated_event.clear()
             query_packet = self._build_packet(Request.QUERY)
-            
             _LOGGER.debug(f"--> SENDING QUERY to {self.address}: {query_packet.hex()}")
             await client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, query_packet, self._write_requires_response)
             await asyncio.wait_for(self._status_updated_event.wait(), timeout=10)
