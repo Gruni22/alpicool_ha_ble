@@ -59,6 +59,7 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
 
     def _notification_handler(self, sender, data: bytearray):
         """Handle incoming notifications from the device."""
+        _LOGGER.debug(f"<-- RAW NOTIFICATION from {sender}: {data.hex()}")
         self._notification_buffer.extend(data)
         while self._notification_buffer:
             start_index = self._notification_buffer.find(b'\xfe\xfe')
@@ -80,6 +81,7 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
     async def async_send_command(self, packet: bytes) -> None:
         """Send a command to the device."""
         try:
+            _LOGGER.debug(f"--> SENDING COMMAND: {packet.hex()}")
             await self.client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, packet, response=self._write_requires_response)
             await self.async_request_refresh()
         except Exception as e:
@@ -87,6 +89,7 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from the device."""
+        _LOGGER.debug(f"Attempting to update data for {self.address}")
         client = self.client
         if not hasattr(self, '_write_char_checked'):
             char = client.services.get_characteristic(FRIDGE_RW_CHARACTERISTIC_UUID)
@@ -96,10 +99,13 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
             await client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
             self._status_updated_event.clear()
             query_packet = self._build_packet(Request.QUERY)
+            
+            _LOGGER.debug(f"--> SENDING QUERY to {self.address}: {query_packet.hex()}")
             await client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, query_packet, self._write_requires_response)
             await asyncio.wait_for(self._status_updated_event.wait(), timeout=10)
+            _LOGGER.debug(f"Successfully received data from {self.address}")
         except asyncio.TimeoutError:
-            _LOGGER.warning("Timeout waiting for status update.")
+            _LOGGER.warning(f"Timeout waiting for status update from {self.address}. No notification received.")
             raise TimeoutError("No response from fridge.")
         finally:
             await client.stop_notify(FRIDGE_NOTIFY_UUID)
@@ -124,6 +130,7 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
             s_byte = FridgeCoordinator._to_signed_byte
             decoded_data = {"locked": bool(payload[0]), "powered_on": bool(payload[1]), "run_mode": payload[2], "bat_saver": payload[3], "left_target": s_byte(payload[4]), "temp_max": s_byte(payload[5]), "temp_min": s_byte(payload[6]), "left_ret_diff": s_byte(payload[7]), "start_delay": payload[8], "unit": payload[9], "left_tc_hot": s_byte(payload[10]), "left_tc_mid": s_byte(payload[11]), "left_tc_cold": s_byte(payload[12]), "left_tc_halt": s_byte(payload[13]), "left_current": s_byte(payload[14]), "bat_percent": payload[15], "bat_vol_int": payload[16], "bat_vol_dec": payload[17]}
             if len(payload) >= 28: decoded_data.update({"right_target": s_byte(payload[18]), "right_ret_diff": s_byte(payload[21]), "right_tc_hot": s_byte(payload[22]), "right_tc_mid": s_byte(payload[23]), "right_tc_cold": s_byte(payload[24]), "right_tc_halt": s_byte(payload[25]), "right_current": s_byte(payload[26]), "running_status": payload[27]})
+            _LOGGER.debug(f"Decoded status: {decoded_data}")
             return decoded_data
         except IndexError as e:
             _LOGGER.error(f"Failed to decode status payload (length {len(payload)}): {e}")

@@ -27,7 +27,7 @@ class AlpicoolEntity(CoordinatorEntity[FridgeCoordinator]):
     @property
     def available(self) -> bool:
         """Return True if the device is available."""
-        return super().available and self.coordinator.data is not None
+        return self.coordinator.data is not None and bool(self.coordinator.data)
 
 def build_set_other_payload(status: dict, new_values: dict) -> bytes:
     """Build the complete payload for the setOther command."""
