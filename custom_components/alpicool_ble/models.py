@@ -9,7 +9,6 @@ from .const import DOMAIN
 class AlpicoolEntity(CoordinatorEntity[FridgeCoordinator]):
     """Base class for Alpicool entities."""
 
-    _attr_should_poll = False
     _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, coordinator: FridgeCoordinator) -> None:
@@ -23,6 +22,11 @@ class AlpicoolEntity(CoordinatorEntity[FridgeCoordinator]):
             name=entry.title,
             manufacturer="Alpicool",
         )
+
+    @property
+    def available(self) -> bool:
+        """Return True if the device is available."""
+        return self.coordinator.last_update_success and self.coordinator.data is not None
 
 def build_set_other_payload(status: dict, new_values: dict) -> bytes:
     """Build the complete payload for the setOther command."""
