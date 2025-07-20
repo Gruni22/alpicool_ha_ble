@@ -21,8 +21,8 @@ BATTERY_SAVER_MAP_REV = {v: k for k, v in BATTERY_SAVER_MAP.items()}
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool select entities."""
-    api: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([AlpicoolBatterySaverSelect(entry, api)])
+    coordinator: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    async_add_entities([AlpicoolBatterySaverSelect(entry, coordinator)])
 
 
 class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
@@ -31,9 +31,9 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
     _attr_entity_category = EntityCategory.CONFIG
     _attr_options = BATTERY_SAVER_OPTIONS
 
-    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: FridgeCoordinator) -> None:
         """Initialize the select entity."""
-        super().__init__(entry, api)
+        super().__init__(entry, coordinator)
         self._attr_unique_id = f"{self._address}_battery_saver"
         self._attr_name = "Battery Saver"
 
@@ -43,7 +43,7 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
         if not self.available:
             return None
         
-        bat_saver_value = self.api.data.get("bat_saver")
+        bat_saver_value = self.coordinator.data.get("bat_saver")
         # Map the numeric value (0, 1, 2) to the string ("Low", "Medium", "High")
         return BATTERY_SAVER_MAP_REV.get(bat_saver_value)
 
@@ -56,6 +56,6 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
         # Map the string ("Low", "Medium", "High") back to the numeric value
         bat_saver_value = BATTERY_SAVER_MAP.get(option)
         
-        payload = build_set_other_payload(self.api.data, {"bat_saver": bat_saver_value})
-        packet = self.api._build_packet(Request.SET, payload)
-        await self.api.async_send_command(packet)
+        payload = build_set_other_payload(self.coordinator.data, {"bat_saver": bat_saver_value})
+        packet = self.coordinator._build_packet(Request.SET, payload)
+        await self.coordinator.async_send_command(packet)

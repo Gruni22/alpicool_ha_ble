@@ -30,13 +30,13 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool climate entities based on initial status."""
-    api: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
     
-    entities = [AlpicoolClimateZone(entry, api, "left")]
+    entities = [AlpicoolClimateZone(entry, coordinator, "left")]
     
-    if "right_current" in api.data:
+    if "right_current" in coordinator.data:
         _LOGGER.info("Dual-zone fridge detected, adding right zone entity.")
-        entities.append(AlpicoolClimateZone(entry, api, "right"))
+        entities.append(AlpicoolClimateZone(entry, coordinator, "right"))
         
     async_add_entities(entities)
 
@@ -52,9 +52,9 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
 
-    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator, zone: str) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: FridgeCoordinator, zone: str) -> None:
         """Initialize the climate entity for a specific zone."""
-        super().__init__(entry, api)
+        super().__init__(entry, coordinator)
         self._zone = zone
         # Read the configuration option selected by the user
         self._has_fridge_freezer_mode = entry.options.get(CONF_DUAL_ZONE_MODES, False)
@@ -65,7 +65,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def _is_dual_zone(self) -> bool:
         """Helper to check if this is a dual-zone model."""
-        return "right_current" in self.api.data
+        return "right_current" in self.coordinator.data
 
     @property
     def preset_modes(self) -> list[str] | None:
@@ -83,7 +83,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         # For configured dual-zone models, the right zone is only available in Freezer mode
         if self._is_dual_zone and self._has_fridge_freezer_mode and self._zone == "right":
             # run_mode 0 is Fridge, 1 is Freezer
-            if self.api.data.get("run_mode") == 0:
+            if self.coordinator.data.get("run_mode") == 0:
                 return False
         
         return True
@@ -91,22 +91,22 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def hvac_mode(self) -> HVACMode | None:
         """Return hvac operation."""
-        return HVACMode.COOL if self.api.data.get("powered_on") else HVACMode.OFF
+        return HVACMode.COOL if self.coordinator.data.get("powered_on") else HVACMode.OFF
 
     @property
     def current_temperature(self) -> float | None:
         """Return the current temperature for this zone."""
-        return self.api.data.get(f"{self._zone}_current")
+        return self.coordinator.data.get(f"{self._zone}_current")
 
     @property
     def target_temperature(self) -> float | None:
         """Return the target temperature for this zone."""
-        return self.api.data.get(f"{self._zone}_target")
+        return self.coordinator.data.get(f"{self._zone}_target")
 
     @property
     def preset_mode(self) -> str | None:
         """Return the current preset mode, adapted for user configuration."""
-        run_mode = self.api.data.get("run_mode")
+        run_mode = self.coordinator.data.get("run_mode")
         if self._is_dual_zone and self._has_fridge_freezer_mode:
             return PRESET_FREEZER if run_mode == 1 else PRESET_FRIDGE
         return PRESET_ECO if run_mode == 1 else PRESET_MAX
@@ -114,21 +114,21 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
-        payload = build_set_other_payload(self.api.data, {"powered_on": is_on})
-        packet = self.api._build_packet(Request.SET, payload)
-        await self.api.async_send_command(packet)
+        payload = build_set_other_payload(self.coordinator.data, {"powered_on": is_on})
+        packet = self.coordinator._build_packet(Request.SET, payload)
+        await self.coordinator.async_send_command(packet)
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
             cmd = Request.SET_LEFT if self._zone == "left" else Request.SET_RIGHT
-            packet = self.api._build_packet(cmd, bytes([temp & 0xFF]))
-            await self.api.async_send_command(packet)
+            packet = self.coordinator._build_packet(cmd, bytes([temp & 0xFF]))
+            await self.coordinator.async_send_command(packet)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         is_mode_1 = preset_mode in [PRESET_ECO, PRESET_FREEZER]
-        payload = build_set_other_payload(self.api.data, {"run_mode": 1 if is_mode_1 else 0})
-        packet = self.api._build_packet(Request.SET, payload)
-        await self.api.async_send_command(packet)
+        payload = build_set_other_payload(self.coordinator.data, {"run_mode": 1 if is_mode_1 else 0})
+        packet = self.coordinator._build_packet(Request.SET, payload)
+        await self.coordinator.async_send_command(packet)

@@ -40,10 +40,10 @@ SENSORS = {
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool sensor entities."""
-    api: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: FridgeCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        AlpicoolSensor(entry, api, sensor_key, sensor_def)
+        AlpicoolSensor(entry, coordinator, sensor_key, sensor_def)
         for sensor_key, sensor_def in SENSORS.items()
     ]
     async_add_entities(entities)
@@ -52,9 +52,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     """Representation of an Alpicool Sensor."""
 
-    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator, sensor_key: str, sensor_def: dict) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: FridgeCoordinator, sensor_key: str, sensor_def: dict) -> None:
         """Initialize the sensor."""
-        super().__init__(entry, api)
+        super().__init__(entry, coordinator)
         self._sensor_key = sensor_key
         self._sensor_def = sensor_def
 
@@ -68,8 +68,8 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        if not self.available or not self.api.data:
+        if not self.available or not self.coordinator.data:
             return None
         
         value_fn: Callable = self._sensor_def["value_fn"]
-        return value_fn(self.api.data)
+        return value_fn(self.coordinator.data)

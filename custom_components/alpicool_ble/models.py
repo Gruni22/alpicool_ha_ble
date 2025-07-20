@@ -1,21 +1,21 @@
 """Models for the Alpicool BLE integration."""
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.entity import DeviceInfo, Entity
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .api import FridgeCoordinator
 from .const import DOMAIN
 
-
-class AlpicoolEntity(Entity):
+class AlpicoolEntity(CoordinatorEntity[FridgeCoordinator]):
     """Base class for Alpicool entities."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, api: FridgeCoordinator) -> None:
+    def __init__(self, entry: ConfigEntry, coordinator: FridgeCoordinator) -> None:
         """Initialize the entity."""
-        self.api = api
+        super().__init__(coordinator)
+        
         self._address = entry.unique_id
         assert self._address is not None
         self._attr_device_info = DeviceInfo(
@@ -27,15 +27,7 @@ class AlpicoolEntity(Entity):
     @property
     def available(self) -> bool:
         """Return True if the device is available."""
-        return bool(self.api.data)
-
-    async def async_added_to_hass(self) -> None:
-        """Connect to events."""
-        self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, f"{DOMAIN}_{self._address}_update", self.async_write_ha_state
-            )
-        )
+        return super().available and self.coordinator.data is not None
 
 def build_set_other_payload(status: dict, new_values: dict) -> bytes:
     """Build the complete payload for the setOther command."""

@@ -7,11 +7,13 @@ from typing import Any
 
 from bleak import BleakClient
 
+# HINZUGEFÜGT: Der `bluetooth`-Namespace wird für den Check benötigt
+from homeassistant.components import bluetooth
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.components.bluetooth.active_update_coordinator import (
     ActiveBluetoothDataUpdateCoordinator,
 )
-from homeassistant.core import callback
+from homeassistant.core import callback, CoreState
 
 from .const import (
     FRIDGE_RW_CHARACTERISTIC_UUID,
@@ -43,8 +45,17 @@ class FridgeCoordinator(ActiveBluetoothDataUpdateCoordinator[dict[str, Any]]):
 
     @callback
     def _needs_poll_method(self, service_info: BluetoothServiceInfoBleak, last_poll_successful: bool) -> bool:
-        """Return if the device needs polling."""
-        return True
+        """
+        Return if the device needs polling.
+        This is the new, intelligent version.
+        """
+        return (
+            self.hass.state == CoreState.RUNNING
+            and bluetooth.async_ble_device_from_address(
+                self.hass, service_info.device.address, connectable=True
+            )
+            is not None
+        )
 
     def _notification_handler(self, sender, data: bytearray):
         """Handle incoming notifications from the device."""
