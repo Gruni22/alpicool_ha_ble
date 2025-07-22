@@ -26,8 +26,7 @@ class FridgeApi:
         self._bind_event = asyncio.Event()
         self._poll_task = None
         self._address = address
-        self._client = BleakClient(self._address, timeout=20.0)
-        # Default to the most common method (write without response)
+        self._client = BleakClient(self._address, timeout=30.0)
         self._write_requires_response = False
         # Buffer for reassembling fragmented packets
         self._notification_buffer = bytearray()
@@ -139,7 +138,6 @@ class FridgeApi:
         """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect...")
         try:
-            # Step 1: Establish base connection. This must succeed.
             if not self._client.is_connected:
                 await self._client.connect()
             
@@ -158,7 +156,6 @@ class FridgeApi:
                 await self.disconnect()
                 return False
 
-            # Check properties to determine write method
             if 'write-without-response' in write_char.properties:
                 self._write_requires_response = False
                 _LOGGER.debug("Using 'write-without-response' for commands.")
@@ -179,23 +176,18 @@ class FridgeApi:
 
         _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
 
-        # Step 2: Try to bind. This is optional and can fail.
         try:
             self._bind_event.clear()
-            # The BIND command appears to be fire-and-forget on all models.
-            # We send it without requiring a response to avoid deadlocking on certain fridge firmwares.
             bind_packet = self._build_packet(Request.BIND, b"\x01")
-            _LOGGER.debug(f"--> SENDING BIND (always without response): {bind_packet.hex()}")
-            await self._client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, bind_packet, response=False)
+            await self._send_raw(bind_packet)
             
-            await asyncio.wait_for(self._bind_event.wait(), timeout=10)
+            await asyncio.wait_for(self._bind_event.wait(), timeout=20)
             _LOGGER.debug("Bind successful.")
         except asyncio.TimeoutError:
             _LOGGER.warning("Bind command timed out. Proceeding without binding. This may work for some models.")
         except Exception as e:
             _LOGGER.warning(f"An error occurred during bind, proceeding without it: {e}")
 
-        # Step 3: Final check. No matter what happened during bind, is the client still connected?
         if self._client.is_connected:
             return True
         else:
@@ -209,7 +201,7 @@ class FridgeApi:
             await self._client.disconnect()
 
     async def _send_raw(self, packet: bytes):
-        """Send raw packet to fridge."""
+        """Send raw packet to fridge, adapting write method."""
         if not self._client.is_connected:
             _LOGGER.error("Cannot send, not connected")
             return
