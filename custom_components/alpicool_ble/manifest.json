@@ -1,0 +1,16 @@
+{
+  "domain": "alpicool_ble",
+  "name": "Alpicool BLE",
+  "config_flow": true,
+  "documentation": "https://github.com/Gruni22/alpicool_ha_ble",
+  "iot_class": "local_polling",
+  "codeowners": ["@Gruni22"],
+  "requirements": ["bleak"],
+  "dependencies": [],
+  "version": "2.0.1",
+  "bluetooth": [
+    {
+      "service_uuid": "00001234-0000-1000-8000-00805f9b34fb"
+    }
+  ]
+}
