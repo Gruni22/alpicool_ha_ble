@@ -7,10 +7,13 @@
   "codeowners": ["@Gruni22"],
   "requirements": ["bleak"],
   "dependencies": [],
-  "version": "2.1.6",
+  "version": "2.1.7",
   "bluetooth": [
     {
       "service_uuid": "00001234-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
     }
   ]
 }
