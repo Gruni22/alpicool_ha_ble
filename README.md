@@ -2,7 +2,7 @@
 
 This is a Home Assistant Custom Component to control Alpicool, BrassMonkey, Ocean Comfort, or other compatible portable fridges via Bluetooth Low Energy (BLE).
 
-This integration creates multiple entities in Home Assistant, allowing you to monitor and control all aspects of your fridge.
+This integration creates multiple entities in Home Assistant, allowing you to monitor and control all known aspects of your fridge.
 
 This component was inspired by the prior work done by klightspeed's [BrassMonkeyFridgeMonitor](https://github.com/klightspeed/BrassMonkeyFridgeMonitor).
 

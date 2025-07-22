@@ -3,7 +3,6 @@ import logging
 import asyncio
 from typing import Any
 
-from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -30,15 +29,8 @@ from .models import AlpicoolEntity, build_set_other_payload
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up the Alpicool climate entities."""
-    address = entry.data["address"]
-    ble_device = async_ble_device_from_address(hass, address.upper(), connectable=True)
-    if not ble_device:
-        _LOGGER.error(f"Device with address {address} not found")
-        return
-
-    api = FridgeApi(ble_device.address, None)
-    hass.data[DOMAIN][entry.entry_id] = api
+    """Set up the Alpicool climate entities based on initial status."""
+    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
     
     entities = [AlpicoolClimateZone(entry, api, "left")]
     
@@ -59,7 +51,6 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
-    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, api: FridgeApi, zone: str) -> None:
         """Initialize the climate entity for a specific zone."""
@@ -69,15 +60,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_ZONE_MODES, False)
         
         self._attr_unique_id = f"{self._address}_{self._zone}"
-        self._attr_name = f"{entry.data['name']} {self._zone.capitalize()}"
-
-    @property
-    def available(self) -> bool:
-        """Return True if the device and this specific zone are available."""
-        # The right zone is only available if 'right_current' key exists in the status
-        if self._zone == "right" and "right_current" not in self.api.status:
-            return False
-        return super().available
+        self._attr_name = f"{self._zone.capitalize()}"
 
     @property
     def _is_dual_zone(self) -> bool:

@@ -1,6 +1,7 @@
 """Models for the Alpicool BLE integration."""
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .api import FridgeApi
 from .const import DOMAIN
@@ -30,8 +31,8 @@ class AlpicoolEntity(Entity):
     async def async_added_to_hass(self) -> None:
         """Connect to events."""
         self.async_on_remove(
-            self.hass.helpers.dispatcher.async_dispatcher_connect(
-                f"{DOMAIN}_{self._address}_update", self.async_write_ha_state
+            async_dispatcher_connect(
+                self.hass, f"{DOMAIN}_{self._address}_update", self.async_write_ha_state
             )
         )
 
