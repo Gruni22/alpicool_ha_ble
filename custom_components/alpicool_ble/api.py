@@ -112,19 +112,29 @@ class FridgeApi:
                 _LOGGER.debug(f"Unhandled command in notification: {cmd}")
 
     async def connect(self) -> bool:
-        """Connect to the fridge and subscribe to notifications."""
+        """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect...")
         try:
-            await self._client.connect()
-            await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
-            _LOGGER.debug("Connection successful.")
-            self._bind_event.clear()
-            await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
-            await asyncio.wait_for(self._bind_event.wait(), timeout=20)
-            _LOGGER.debug("Bind successful.")
+            # Establish the base BLE connection
+            if not self._client.is_connected:
+                await self._client.connect()
+                await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
+            _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
+
+            # Try the BIND process with a timeout
+            try:
+                self._bind_event.clear()
+                await self._send_raw(self._build_packet(Request.BIND, b"\x01"))
+                await asyncio.wait_for(self._bind_event.wait(), timeout=20) # 10 second timeout for bind
+                _LOGGER.debug("Bind successful.")
+            except asyncio.TimeoutError:
+                _LOGGER.warning("Bind command timed out. Proceeding without binding. This may work for some models.")
+            
+            # As long as the base connection is up, we return True.
             return True
+
         except Exception as e:
-            _LOGGER.error(f"Failed to connect or bind: {e}")
+            _LOGGER.error(f"Failed to establish base BLE connection: {e}")
             await self.disconnect()
             return False
 
