@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entities = [AlpicoolClimateZone(entry, api, "left")]
     
     if "right_current" in api.status:
-        _LOGGER.info("Dual-zone fridge detected, adding right zone entity.")
+        _LOGGER.info("Dual-zone fridge detected, adding right zone entity")
         entities.append(AlpicoolClimateZone(entry, api, "right"))
         
     async_add_entities(entities)

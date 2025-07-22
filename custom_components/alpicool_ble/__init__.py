@@ -36,9 +36,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await api.disconnect()
         raise ConfigEntryNotReady(f"Failed to initialize Alpicool device at {address}: {e}") from e
 
+    api._last_successful_update_time = hass.loop.time()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Use the modern way to create a background task
     entry.async_create_background_task(
         hass,
         api.start_polling(lambda: async_dispatcher_send(hass, f"{DOMAIN}_{address}_update")),

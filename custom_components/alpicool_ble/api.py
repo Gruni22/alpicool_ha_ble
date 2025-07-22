@@ -30,6 +30,8 @@ class FridgeApi:
         self._write_requires_response = False
         # Buffer for reassembling fragmented packets
         self._notification_buffer = bytearray()
+        self.is_available: bool = True
+        self._last_successful_update_time: float = 0.0
 
     def _checksum(self, data: bytes) -> int:
         """Calculate 2-byte big endian checksum."""
@@ -160,7 +162,7 @@ class FridgeApi:
             else:
                 _LOGGER.debug(f"Unhandled command in notification: {cmd}")
 
-    async def connect(self) -> bool:
+    async def connect(self, is_reconnect: bool = False) -> bool:
         """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect...")
         try:
@@ -199,20 +201,21 @@ class FridgeApi:
             _LOGGER.error(f"Failed to establish base BLE connection: {e}")
             await self.disconnect()
             return False
+        if not is_reconnect:
+            _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
+            try:
+                self._bind_event.clear()
+                bind_packet = self._build_packet(Request.BIND, b"\x01")
+                await self._send_raw(bind_packet)
 
-        _LOGGER.debug("Base BLE connection successful. Attempting to bind...")
-
-        try:
-            self._bind_event.clear()
-            bind_packet = self._build_packet(Request.BIND, b"\x01")
-            await self._send_raw(bind_packet)
-
-            await asyncio.wait_for(self._bind_event.wait(), timeout=20)
-            _LOGGER.debug("Bind successful.")
-        except asyncio.TimeoutError:
-            _LOGGER.debug("Bind command timed out. Proceeding without binding. This may work for some models.")
-        except Exception as e:
-            _LOGGER.debug(f"An error occurred during bind, proceeding without it: {e}")
+                await asyncio.wait_for(self._bind_event.wait(), timeout=20)
+                _LOGGER.debug("Bind successful.")
+            except asyncio.TimeoutError:
+                _LOGGER.debug("Bind command timed out. Proceeding without binding. This may work for some models.")
+            except Exception as e:
+                _LOGGER.debug(f"An error occurred during bind, proceeding without it: {e}")
+        else:
+            _LOGGER.debug("Skipping bind process for reconnect.")
 
         if self._client.is_connected:
             return True
@@ -234,29 +237,59 @@ class FridgeApi:
         _LOGGER.debug(f"--> SENDING: {packet.hex()}")
         await self._client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, packet, response=self._write_requires_response)
 
-    async def update_status(self):
-        """Request status and wait for notification."""
+    async def update_status(self) -> bool:
+        """Request status and wait for notification. Returns True on success, False on timeout."""
+        if not self._client.is_connected:
+            _LOGGER.warning("Cannot update status, not connected")
+            return False
+            
         self._status_updated_event.clear()
         await self._send_raw(self._build_packet(Request.QUERY, b"\x02"))
-        try: await asyncio.wait_for(self._status_updated_event.wait(), timeout=3)
-        except asyncio.TimeoutError: _LOGGER.warning("Timeout waiting for status")
+        try:
+            await asyncio.wait_for(self._status_updated_event.wait(), timeout=5)
+            return True
+        except asyncio.TimeoutError:
+            _LOGGER.warning("Timeout waiting for status update")
+            return False
 
     async def start_polling(self, update_callback):
         """Start polling for status updates in the background."""
         _LOGGER.debug("Starting background polling.")
+        if self._last_successful_update_time == 0.0:
+            self._last_successful_update_time = asyncio.get_running_loop().time()
         while True:
             try:
                 if not self._client.is_connected:
                     _LOGGER.info("Device disconnected, attempting to reconnect.")
-                    if not await self.connect():
-                         await asyncio.sleep(60)
-                         continue
-                await self.update_status()
+                    if await self.connect(is_reconnect=True):
+                        _LOGGER.info("Successfully reconnected to device")
+                        self.is_available = True
+                        self._last_successful_update_time = asyncio.get_running_loop().time()
+                    else:
+                        _LOGGER.warning("Reconnect failed. Will retry later")
+                if self._client.is_connected:
+                    if await self.update_status():
+                        self._last_successful_update_time = asyncio.get_running_loop().time()
+                        if not self.is_available:
+                            _LOGGER.info("Device communication restored.")
+                            self.is_available = True
+                time_since_success = asyncio.get_running_loop().time() - self._last_successful_update_time
+                if time_since_success > 300: # 5 minutes
+                    if self.is_available:
+                        _LOGGER.warning("Device has been unreachable for over 5 minutes. Marking as unavailable")
+                        self.is_available = False
+                        self.status.clear()
                 update_callback()
-                await asyncio.sleep(30)
+
+                # --- Sleep ---
+                sleep_duration = 30 if self._client.is_connected else 60
+                await asyncio.sleep(sleep_duration)
+
             except asyncio.CancelledError:
-                _LOGGER.debug("Polling task cancelled.")
+                _LOGGER.debug("Polling task cancelled")
+                self.is_available = False
                 break
             except Exception as e:
-                _LOGGER.error(f"Error during polling: {e}")
+                _LOGGER.error(f"An unexpected error occurred during polling: {e}")
+                self.is_available = False
                 await asyncio.sleep(60)

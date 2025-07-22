@@ -26,7 +26,7 @@ class AlpicoolEntity(Entity):
     @property
     def available(self) -> bool:
         """Return True if the device is available."""
-        return bool(self.api.status)
+        return self.api.is_available
 
     async def async_added_to_hass(self) -> None:
         """Connect to events."""
