@@ -1,6 +1,6 @@
-# Alpicool BLE Integration for Home Assistant
+# Alpicool, BrassMonkey, Ocean Comfort, ... 12V/24V BLE Fridge Integration for Home Assistant
 
-This is a Home Assistant Custom Component to control Alpicool portable fridges via Bluetooth Low Energy (BLE).
+This is a Home Assistant Custom Component to control Alpicool, BrassMonkey, Ocean Comfort, or other compatible portable fridges via Bluetooth Low Energy (BLE).
 
 This integration creates multiple entities in Home Assistant, allowing you to monitor and control all aspects of your fridge.
 
@@ -20,6 +20,8 @@ This component was inspired by the prior work done by klightspeed's [BrassMonkey
 * **Number:** `number` entities to configure advanced settings directly from the UI:
     * Compressor start delay (in minutes).
     * Temperature hysteresis (return difference).
+* **Select:** `select` entities to configure advanced settings directly from the UI:
+    * Battery saver
 
 ## Dual-Zone Support
 This integration supports !!!untested!!! **both single and dual-zone fridges**. 
@@ -58,6 +60,6 @@ Configuration is done via the Home Assistant UI.
 The development of this integration revealed several quirks in the Alpicool BLE protocol that required specific workarounds in the code.
 
 * **Inconsistent Protocol:** The rules for calculating packet length and checksums are not consistent across all commands.
-* **Special Command Handling:** `BIND`, `QUERY`, `SET_LEFT`, and `SET_RIGHT` commands are treated as special cases with a different packet structure than more complex commands like `SET_OTHER`.
+* **Special Command Handling:** `BIND`, `QUERY`, `SET_LEFT`, and `SET_RIGHT` commands are treated as special cases with a different packet structure than more complex commands like `SET`.
 * **Concatenated BLE Responses:** The fridge responds to `SET` commands by sending two packets concatenated into a single BLE notification: first an echo of the sent command, followed by a full status update. The notification handler was specifically rewritten to parse this data stream correctly and ignore the echo.
 * **Signed Byte Conversion:** Temperature values are transmitted as signed 8-bit integers. The code correctly converts between negative temperature values (e.g., -20°C) and their unsigned byte representation (e.g., 236) for both sending and receiving data.
