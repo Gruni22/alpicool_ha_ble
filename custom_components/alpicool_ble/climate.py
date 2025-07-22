@@ -23,7 +23,7 @@ PRESET_ECO = "Eco"
 PRESET_MAX = "Max"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    """Set up the Alpicool climate entity."""
+    """Set up the Alpicool climate entities."""
     address = entry.data["address"]
     ble_device = async_ble_device_from_address(hass, address.upper(), connectable=True)
     if not ble_device:
@@ -31,10 +31,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         return
 
     api = FridgeApi(ble_device.address, None)
-    async_add_entities([AlpicoolClimateEntity(entry, api)])
+    
+    # Create entities for both left and right zones.
+    # The right zone entity will only become available if the device reports data for it.
+    entities = [
+        AlpicoolClimateEntity(entry, api, "left"),
+        AlpicoolClimateEntity(entry, api, "right"),
+    ]
+    async_add_entities(entities)
 
 class AlpicoolClimateEntity(ClimateEntity):
-    """Representation of an Alpicool refrigerator as a Climate entity."""
+    """Representation of an Alpicool refrigerator zone as a Climate entity."""
 
     _attr_hvac_modes = [HVACMode.COOL, HVACMode.OFF]
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
@@ -47,35 +54,43 @@ class AlpicoolClimateEntity(ClimateEntity):
     )
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi) -> None:
-        """Initialize the climate entity."""
+    def __init__(self, entry: ConfigEntry, api: FridgeApi, zone: str) -> None:
+        """Initialize the climate entity for a specific zone."""
         self.api = api
+        self._zone = zone
         self._address = entry.data["address"]
-        self._attr_unique_id = self._address
-        self._attr_name = entry.data["name"]
+        
+        self._attr_unique_id = f"{self._address}_{self._zone}"
+        self._attr_name = f"{entry.data['name']} {self._zone.capitalize()}"
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self._address)},
-            "name": self._attr_name,
+            "name": entry.data["name"],
             "manufacturer": "Alpicool",
         }
 
     async def async_added_to_hass(self) -> None:
         """Run when entity is added."""
-        _LOGGER.debug("Alpicool: async_added_to_hass - trying to connect")
-        connected = await self.api.connect()
-        if connected:
-            _LOGGER.debug("Initial connection successful. The entity will now be updated by Home Assistant.")
-        else:
-            _LOGGER.warning("Initial connection to Alpicool failed. The entity will be unavailable and retry later.")
+        # Only have the 'left' entity handle the initial connection
+        if self._zone == "left":
+            _LOGGER.debug("Alpicool: async_added_to_hass - trying to connect")
+            connected = await self.api.connect()
+            if connected:
+                _LOGGER.debug("Initial connection successful. The entity will now be updated by Home Assistant.")
+            else:
+                _LOGGER.warning("Initial connection to Alpicool failed. The entity will be unavailable and retry later.")
 
     async def async_will_remove_from_hass(self) -> None:
         """Run when entity is removed."""
-        await self.api.disconnect()
+        # Only have the 'left' entity handle the disconnection
+        if self._zone == "left":
+            await self.api.disconnect()
 
     @property
     def available(self) -> bool:
-        """Return True if the device is available."""
-        _LOGGER.debug("Checking availability, api.status = %s", self.api.status)
+        """Return True if the device and this specific zone are available."""
+        # The right zone is only available if 'right_current' key exists in the status
+        if self._zone == "right" and "right_current" not in self.api.status:
+            return False
         return bool(self.api.status)
 
     @property
@@ -87,17 +102,17 @@ class AlpicoolClimateEntity(ClimateEntity):
 
     @property
     def current_temperature(self) -> float | None:
-        """Return the current temperature."""
-        return self.api.status.get("left_current")
+        """Return the current temperature for this zone."""
+        return self.api.status.get(f"{self._zone}_current")
 
     @property
     def target_temperature(self) -> float | None:
-        """Return the target temperature."""
-        return self.api.status.get("left_target")
+        """Return the target temperature for this zone."""
+        return self.api.status.get(f"{self._zone}_target")
 
     @property
     def preset_mode(self) -> str | None:
-        """Return the current preset mode."""
+        """Return the current preset mode (same for both zones)."""
         if not self.available:
             return None
         return PRESET_ECO if self.api.status.get("run_mode") == 1 else PRESET_MAX
@@ -107,54 +122,53 @@ class AlpicoolClimateEntity(ClimateEntity):
         """Return the extra state attributes."""
         if not self.available:
             return {}
-        return {
+        
+        # Base attributes are shown for both entities
+        attrs = {
             "battery_percent": self.api.status.get("bat_percent"),
             "battery_voltage": f"{self.api.status.get('bat_vol_int', 0)}.{self.api.status.get('bat_vol_dec', 0)}",
             "locked": self.api.status.get("locked"),
-            "start_delay": self.api.status.get("start_delay"),
-            "hysteresis": self.api.status.get("left_ret_diff"),
         }
+        # Hysteresis is zone-specific
+        attrs["hysteresis"] = self.api.status.get(f"{self._zone}_ret_diff")
+        return attrs
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         if hvac_mode == HVACMode.COOL:
-            new_status = self.api.status.copy()
-            new_status["powered_on"] = True
+            await self._send_set_command({"powered_on": True})
         else:
-            new_status = self.api.status.copy()
-            new_status["powered_on"] = False
-
-        # Compose full set payload
-        payload = self._build_set_payload(new_status)
-        await self.api._send_raw(payload)
+            await self._send_set_command({"powered_on": False})
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
-            packet = self.api._build_packet(Request.SET_LEFT, bytes([temp]))
+            cmd = Request.SET_LEFT if self._zone == "left" else Request.SET_RIGHT
+            packet = self.api._build_packet(cmd, bytes([temp & 0xFF]))
             await self.api._send_raw(packet)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
-        new_status = self.api.status.copy()
-        new_status["run_mode"] = 1 if preset_mode == PRESET_ECO else 0
-
-        payload = self._build_set_payload(new_status)
-        await self.api._send_raw(payload)
+        await self._send_set_command({"run_mode": 1 if preset_mode == PRESET_ECO else 0})
 
     async def async_update(self) -> None:
         """Update entity by querying latest state."""
-        _LOGGER.debug("Alpicool: async_update called")
-        await self.api.update_status()
-        _LOGGER.debug("Alpicool: after update, status = %s", self.api.status)
+        # Only have the 'left' entity trigger the update to avoid duplicate calls
+        if self._zone == "left":
+            _LOGGER.debug("Alpicool: async_update called by left zone")
+            await self.api.update_status()
+            _LOGGER.debug("Alpicool: after update, status = %s", self.api.status)
 
-    def _build_set_payload(self, status: dict) -> bytes:
-        """Build the payload for setOther command."""
+    def _build_set_other_payload(self, new_values: dict) -> bytes:
+        """Build the complete payload for the setOther command."""
+        status = self.api.status.copy()
+        status.update(new_values)
+
         def to_unsigned_byte(x: int) -> int:
-            """Convert a signed int (-128 to 127) to its unsigned byte value (0-255)."""
             return x & 0xFF
 
+        # Build payload for both zones, using defaults if not available
         data = bytearray([
             int(status.get("locked", 0)),
             int(status.get("powered_on", 1)),
@@ -170,5 +184,22 @@ class AlpicoolClimateEntity(ClimateEntity):
             to_unsigned_byte(status.get("left_tc_mid", 0)),
             to_unsigned_byte(status.get("left_tc_cold", 0)),
             to_unsigned_byte(status.get("left_tc_halt", 0)),
+            # Dual-zone SET payload starts here
+            to_unsigned_byte(status.get("right_target", 0)),
+            0, # Always zero
+            0, # Always zero
+            to_unsigned_byte(status.get("right_ret_diff", 1)),
+            to_unsigned_byte(status.get("right_tc_hot", 0)),
+            to_unsigned_byte(status.get("right_tc_mid", 0)),
+            to_unsigned_byte(status.get("right_tc_cold", 0)),
+            to_unsigned_byte(status.get("right_tc_halt", 0)),
+            0, # Always zero
+            0, # Always zero
+            0, # Always zero
         ])
         return self.api._build_packet(Request.SET_OTHER, data)
+
+    async def _send_set_command(self, new_values: dict):
+        """Helper to send a SET_OTHER command."""
+        payload = self._build_set_other_payload(new_values)
+        await self.api._send_raw(payload)
