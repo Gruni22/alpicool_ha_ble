@@ -18,14 +18,15 @@ def _to_signed_byte(b: int) -> int:
 class FridgeApi:
     """A class to interact with the fridge."""
 
-    def __init__(self, address: str, disconnected_callback) -> None:
+    def __init__(self, address: str) -> None:
+        """Initialize the API."""
         self._lock = asyncio.Lock()
         self.status = {}
         self._status_updated_event = asyncio.Event()
         self._bind_event = asyncio.Event()
-
+        self._poll_task = None
         self._address = address
-        self._client = BleakClient(self._address, disconnected_callback=disconnected_callback, timeout=20.0)
+        self._client = BleakClient(self._address, timeout=20.0)
 
     def _checksum(self, data: bytes) -> int:
         """Calculate 2-byte big endian checksum."""
