@@ -7,7 +7,7 @@
   "codeowners": ["@Gruni22"],
   "issue_tracker": "https://github.com/Gruni22/alpicool_ha_ble/issues",
   "requirements": ["bleak"],
-  "dependencies": [],
+  "dependencies": ["bluetooth"],
   "version": "3.1.2",
   "bluetooth": [
     {
