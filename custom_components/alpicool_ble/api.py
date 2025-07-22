@@ -34,12 +34,14 @@ class FridgeApi:
 
     def _build_packet(self, cmd: int, data: bytes = b"") -> bytes:
         """Build a BLE command packet based on known working examples and protocol quirks."""
-        
-        # --- Handle all known special cases with a 1-byte checksum ---
-        if cmd in [Request.BIND, Request.QUERY, Request.SET_LEFT, Request.SET_RIGHT]:
-            # This logic is based on the working BIND/QUERY commands
+
+        if cmd == Request.BIND:
+            return b"\xFE\xFE\x03\x00\x01\xFF"
+        if cmd == Request.QUERY:
+            return b"\xFE\xFE\x03\x01\x02\x00"
+
+        if cmd in [Request.SET_LEFT, Request.SET_RIGHT]:
             header = b"\xFE\xFE"
-            # The length byte for these simple commands appears to be consistently 3
             length = 3
             
             packet = bytearray(header)
@@ -47,14 +49,12 @@ class FridgeApi:
             packet.append(cmd)
             packet.extend(data)
             
-            # These commands use a simple 1-byte checksum over the whole packet so far
             checksum = sum(packet) & 0xFF
             packet.append(checksum)
             
             _LOGGER.debug(f"Built special-case packet for cmd {cmd}: {packet.hex()}")
             return bytes(packet)
 
-        # --- Fallback for complex commands like SET_OTHER ---
         _LOGGER.debug(f"Using dynamic builder for complex cmd {cmd}")
         header = b"\xFE\xFE"
         payload = bytearray([cmd])
