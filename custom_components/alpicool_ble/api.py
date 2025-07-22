@@ -34,7 +34,12 @@ class FridgeApi:
 
     def _build_packet(self, cmd: int, data: bytes = b"") -> bytes:
         """Build a BLE command packet based on known working examples and protocol quirks."""
-        if cmd in [Request.BIND, Request.QUERY, Request.SET_LEFT, Request.SET_RIGHT]:
+        if cmd == Request.BIND:
+            return b"\xFE\xFE\x03\x00\x01\xFF"
+        if cmd == Request.QUERY:
+            return b"\xFE\xFE\x03\x01\x02\x00"
+
+        if cmd in [Request.SET_LEFT, Request.SET_RIGHT]:
             header = b"\xFE\xFE"
             length = 3
             packet = bytearray(header)
@@ -153,16 +158,21 @@ class FridgeApi:
 
     async def start_polling(self, update_callback):
         """Start polling for status updates in the background."""
+        _LOGGER.debug("Starting background polling.")
         while True:
             try:
                 if not self._client.is_connected:
+                    _LOGGER.info("Device disconnected, attempting to reconnect.")
                     if not await self.connect():
-                        await asyncio.sleep(60)
-                        continue
+                         await asyncio.sleep(60)
+                         continue
+                
                 await self.update_status()
                 update_callback()
                 await asyncio.sleep(30)
-            except asyncio.CancelledError: break
+            except asyncio.CancelledError:
+                _LOGGER.debug("Polling task cancelled.")
+                break
             except Exception as e:
                 _LOGGER.error(f"Error during polling: {e}")
                 await asyncio.sleep(60)

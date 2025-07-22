@@ -1,4 +1,6 @@
 """The Alpicool BLE integration."""
+import logging
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -17,9 +19,28 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Alpicool BLE from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    # This will automatically forward the entry to the async_setup_entry
-    # functions in sensor.py, switch.py, and number.py
+    address = entry.data["address"]
+    
+    api = FridgeApi(address)
+    hass.data[DOMAIN][entry.entry_id] = api
+
+    try:
+        if not await api.connect():
+            raise ConfigEntryNotReady(f"Could not connect to Alpicool device at {address}")
+        await api.update_status()
+    except Exception as e:
+        await api.disconnect()
+        raise ConfigEntryNotReady(f"Failed to initialize Alpicool device at {address}: {e}") from e
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Use the modern way to create a background task
+    entry.async_create_background_task(
+        hass,
+        api.start_polling(lambda: async_dispatcher_send(hass, f"{DOMAIN}_{address}_update")),
+        name="alpicool_ble_poll"
+    )
+
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
