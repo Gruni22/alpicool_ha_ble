@@ -1,6 +1,7 @@
 """Climate platform for the Alpicool BLE integration."""
-import logging
+
 import asyncio
+import logging
 from typing import Any
 
 from homeassistant.components.climate import (
@@ -12,33 +13,38 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
 from .const import (
-    DOMAIN,
-    Request,
-    PRESET_ECO,
-    PRESET_MAX,
-    PRESET_FRIDGE,
-    PRESET_FREEZER,
     CONF_DUAL_ZONE_MODES,
+    DOMAIN,
+    PRESET_ECO,
+    PRESET_FREEZER,
+    PRESET_FRIDGE,
+    PRESET_MAX,
 )
-from .models import AlpicoolEntity, build_set_other_payload
+from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
     """Set up the Alpicool climate entities based on initial status."""
     api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
-    
+
     entities = [AlpicoolClimateZone(entry, api, "left")]
-    
+
     if "right_current" in api.status:
-        _LOGGER.info("Dual-zone fridge detected, adding right zone entity")
+        _LOGGER.debug("Dual-zone fridge detected, adding right zone entity")
         entities.append(AlpicoolClimateZone(entry, api, "right"))
-        
+
     async_add_entities(entities)
+
 
 class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     """Representation of an Alpicool refrigerator zone."""
@@ -58,7 +64,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         self._zone = zone
         # Read the configuration option selected by the user
         self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_ZONE_MODES, False)
-        
+
         self._attr_unique_id = f"{self._address}_{self._zone}"
         self._attr_name = f"{self._zone.capitalize()}"
 
@@ -79,13 +85,17 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         """Return True if the device and this specific zone are available."""
         if not super().available:
             return False
-        
+
         # For configured dual-zone models, the right zone is only available in Freezer mode
-        if self._is_dual_zone and self._has_fridge_freezer_mode and self._zone == "right":
+        if (
+            self._is_dual_zone
+            and self._has_fridge_freezer_mode
+            and self._zone == "right"
+        ):
             # run_mode 0 is Fridge, 1 is Freezer
             if self.api.status.get("run_mode") == 0:
                 return False
-        
+
         return True
 
     @property
@@ -111,33 +121,30 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
             return PRESET_FREEZER if run_mode == 1 else PRESET_FRIDGE
         return PRESET_ECO if run_mode == 1 else PRESET_MAX
 
-    async def _send_and_update(self, packet: bytes):
-        """Send a command, wait briefly, and trigger a status update for all entities."""
-        await self.api._send_raw(packet)
-        # Give the fridge a moment to process the command before querying its new state
-        await asyncio.sleep(0.5)
-        await self.api.update_status()
-        # Tell all related entities to update their state from the new api.status
-        async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
-
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
-        payload = build_set_other_payload(self.api.status, {"powered_on": is_on})
-        packet = self.api._build_packet(Request.SET, payload)
-        await self._send_and_update(packet)
+        await self.api.async_set_values({"powered_on": is_on})
+
+        await asyncio.sleep(0.5)
+        if await self.api.update_status():
+            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
-            cmd = Request.SET_LEFT if self._zone == "left" else Request.SET_RIGHT
-            packet = self.api._build_packet(cmd, bytes([temp & 0xFF]))
-            await self._send_and_update(packet)
+            await self.api.async_set_temperature(self._zone, temp)
+
+            await asyncio.sleep(0.5)
+            if await self.api.update_status():
+                async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         is_mode_1 = preset_mode in [PRESET_ECO, PRESET_FREEZER]
-        payload = build_set_other_payload(self.api.status, {"run_mode": 1 if is_mode_1 else 0})
-        packet = self.api._build_packet(Request.SET, payload)
-        await self._send_and_update(packet)
+        run_mode_value = 1 if is_mode_1 else 0
+        await self.api.async_set_values({"run_mode": run_mode_value})
+        await asyncio.sleep(0.5)
+        if await self.api.update_status():
+            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")

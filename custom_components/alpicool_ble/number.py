@@ -1,15 +1,16 @@
 """Number platform for the Alpicool BLE integration."""
+
 import logging
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
-from .const import DOMAIN, Request
-from .models import AlpicoolEntity, build_set_other_payload
+from .const import DOMAIN
+from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +33,12 @@ NUMBERS = {
     },
 }
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
     """Set up the Alpicool number entities."""
     api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
 
@@ -48,7 +54,9 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi, number_key: str, number_def: dict) -> None:
+    def __init__(
+        self, entry: ConfigEntry, api: FridgeApi, number_key: str, number_def: dict
+    ) -> None:
         """Initialize the number entity."""
         super().__init__(entry, api)
         self._number_key = number_key
@@ -71,5 +79,4 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        payload = build_set_other_payload(self.api.status, {self._number_key: int(value)})
-        await self.api._send_raw(self.api._build_packet(Request.SET, payload))
+        await self.api.async_set_values({self._number_key: int(value)})

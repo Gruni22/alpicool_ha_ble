@@ -1,6 +1,7 @@
 """Sensor platform for the Alpicool BLE integration."""
+
+from collections.abc import Callable
 import logging
-from typing import Callable
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -11,11 +12,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfElectricPotential
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
 from .const import DOMAIN
-from .models import AlpicoolEntity
+from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,11 +35,18 @@ SENSORS = {
         "device_class": SensorDeviceClass.VOLTAGE,
         "state_class": SensorStateClass.MEASUREMENT,
         "entity_category": EntityCategory.DIAGNOSTIC,
-        "value_fn": lambda status: float(f"{status.get('bat_vol_int', 0)}.{status.get('bat_vol_dec', 0)}"),
+        "value_fn": lambda status: float(
+            f"{status.get('bat_vol_int', 0)}.{status.get('bat_vol_dec', 0)}"
+        ),
     },
 }
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
     """Set up the Alpicool sensor entities."""
     api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
 
@@ -52,7 +60,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     """Representation of an Alpicool Sensor."""
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi, sensor_key: str, sensor_def: dict) -> None:
+    def __init__(
+        self, entry: ConfigEntry, api: FridgeApi, sensor_key: str, sensor_def: dict
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(entry, api)
         self._sensor_key = sensor_key
@@ -70,6 +80,6 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
         """Return the state of the sensor."""
         if not self.available or not self.api.status:
             return None
-        
+
         value_fn: Callable = self._sensor_def["value_fn"]
         return value_fn(self.api.status)
