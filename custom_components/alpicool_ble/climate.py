@@ -16,13 +16,10 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import FridgeApi
-from .const import DOMAIN, Request
+from .const import DOMAIN, Request, Preset
 from .models import AlpicoolEntity, build_set_other_payload
 
 _LOGGER = logging.getLogger(__name__)
-
-PRESET_ECO = "Eco"
-PRESET_MAX = "Max"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
     """Set up the Alpicool climate entities."""
@@ -51,7 +48,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     _attr_target_temperature_step = 1.0
     _attr_min_temp = -20
     _attr_max_temp = 20
-    _attr_preset_modes = [PRESET_ECO, PRESET_MAX]
+    _attr_preset_modes = [Preset.ECO, Preset.MAX]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
@@ -90,7 +87,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def preset_mode(self) -> str | None:
         """Return the current preset mode."""
-        return PRESET_ECO if self.api.status.get("run_mode") == 1 else PRESET_MAX
+        return Preset.ECO if self.api.status.get("run_mode") == 1 else Preset.MAX
 
     async def _send_and_update(self, packet: bytes):
         """Send a command, wait briefly, and trigger a status update for all entities."""
@@ -118,7 +115,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
-        is_eco = preset_mode == PRESET_ECO
+        is_eco = preset_mode == Preset.ECO
         payload = build_set_other_payload(self.api.status, {"run_mode": 1 if is_eco else 0})
         packet = self.api._build_packet(Request.SET_OTHER, payload)
         await self._send_and_update(packet)
