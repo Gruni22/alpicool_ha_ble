@@ -32,21 +32,44 @@ class FridgeApi:
         return sum(data) & 0xFFFF
 
     def _build_packet(self, cmd: int, data: bytes = b"") -> bytes:
-        """Build a BLE command packet based on known working examples and educated guesses."""
-        if cmd == Request.BIND:
-            return b"\xFE\xFE\x03\x00\x01\xFF"
-        if cmd == Request.QUERY:
-            return b"\xFE\xFE\x03\x01\x02\x00"
+        """Build a BLE command packet based on known working examples and protocol quirks."""
+        
+        # --- Handle all known special cases with a 1-byte checksum ---
+        if cmd in [Request.BIND, Request.QUERY, Request.SET_LEFT, Request.SET_RIGHT]:
+            # This logic is based on the working BIND/QUERY commands
+            header = b"\xFE\xFE"
+            # The length byte for these simple commands appears to be consistently 3
+            length = 3
+            
+            packet = bytearray(header)
+            packet.append(length)
+            packet.append(cmd)
+            packet.extend(data)
+            
+            # These commands use a simple 1-byte checksum over the whole packet so far
+            checksum = sum(packet) & 0xFF
+            packet.append(checksum)
+            
+            _LOGGER.debug(f"Built special-case packet for cmd {cmd}: {packet.hex()}")
+            return bytes(packet)
 
+        # --- Fallback for complex commands like SET_OTHER ---
+        _LOGGER.debug(f"Using dynamic builder for complex cmd {cmd}")
         header = b"\xFE\xFE"
         payload = bytearray([cmd])
         payload.extend(data)
+        
+        # The length for complex commands seems to include the checksum length
         length = len(payload) + 2
+        
         packet = bytearray(header)
         packet.append(length)
         packet.extend(payload)
+        
+        # These commands use a 2-byte checksum
         checksum = self._checksum(packet)
         packet.extend(checksum.to_bytes(2, "big"))
+        
         _LOGGER.debug(f"Dynamically built packet for cmd {cmd}: {packet.hex()}")
         return bytes(packet)
 
@@ -137,7 +160,7 @@ class FridgeApi:
             cmd = current_packet[3]
             
             if cmd == Request.QUERY:
-                payload = current_packet[4:-2]
+                payload = current_packet[4:-2] if packet_len_byte > 3 else current_packet[4:-1]
                 self._decode_status(payload)
                 self._status_updated_event.set()
             elif cmd == Request.BIND:
