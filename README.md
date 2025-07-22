@@ -52,7 +52,8 @@ Configuration is done via the Home Assistant UI.
 1.  Navigate to **Settings > Devices & Services**.
 2.  Home Assistant should automatically discover your fridge if it is powered on and nearby. If so, click **Configure** on the discovered device card.
 3.  If it's not discovered automatically, click **Add Integration**, search for "Alpicool BLE", and follow the prompts to select your device.
-4.  Press the pairing button on the fridge, if "APP" is written on the display.
+4.  Select "dual_zone_modes" if your freezer has a Freezer or Fridge Mode. This will disable seperate controls, when the device is in fridge mode.
+5.  Press the pairing button on the fridge, if "APP" is written on the display.
 
 ***
 ## Technical Details & Protocol Quirks
