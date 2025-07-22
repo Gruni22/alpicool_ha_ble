@@ -27,6 +27,8 @@ class FridgeApi:
         self._poll_task = None
         self._address = address
         self._client = BleakClient(self._address, timeout=20.0)
+        # Default to the most common method (write without response)
+        self._write_requires_response = False
 
     def _checksum(self, data: bytes) -> int:
         """Calculate 2-byte big endian checksum."""
@@ -119,33 +121,34 @@ class FridgeApi:
             if not self._client.is_connected:
                 await self._client.connect()
             
-            # Step 1a: UUID Parser - Discover and validate services and characteristics
             _LOGGER.debug("Discovering services and characteristics...")
-            discovered_char_uuids = {char.uuid.lower() for service in self._client.services for char in service.characteristics}
+            write_char = None
             for service in self._client.services:
-                _LOGGER.debug(f"  [Service] {service.uuid}")
                 for char in service.characteristics:
-                    _LOGGER.debug(f"    [Characteristic] {char.uuid} | Properties: {char.properties}")
-
-            required_uuids = {FRIDGE_RW_CHARACTERISTIC_UUID.lower(), FRIDGE_NOTIFY_UUID.lower()}
-            if not required_uuids.issubset(discovered_char_uuids):
-                _LOGGER.error(
-                    "Device is missing required characteristics. "
-                    f"Found: {discovered_char_uuids}. Required: {required_uuids}"
-                )
-                await self.disconnect()
-                return False
-            _LOGGER.debug("All required characteristics found.")
+                    if char.uuid.lower() == FRIDGE_RW_CHARACTERISTIC_UUID.lower():
+                        write_char = char
+                        break
+                if write_char:
+                    break
             
-            # Step 1b: Try to start notifications.
-            _LOGGER.debug(f"Attempting to start notifications on {FRIDGE_NOTIFY_UUID}...")
-            try:
-                await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
-                _LOGGER.debug("Successfully started notifications.")
-            except Exception as e:
-                _LOGGER.error(f"Failed to start notifications: {e}. This may be a permissions issue or the characteristic may not exist.")
+            if not write_char:
+                _LOGGER.error(f"Write characteristic {FRIDGE_RW_CHARACTERISTIC_UUID} not found!")
                 await self.disconnect()
                 return False
+
+            # Check properties to determine write method
+            if 'write-without-response' in write_char.properties:
+                self._write_requires_response = False
+                _LOGGER.debug("Using 'write-without-response' for commands.")
+            elif 'write' in write_char.properties:
+                self._write_requires_response = True
+                _LOGGER.info("Device requires response for writes. Using 'write' for commands.")
+            else:
+                _LOGGER.error(f"Write characteristic {write_char.uuid} has no usable write properties.")
+                await self.disconnect()
+                return False
+
+            await self._client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
 
         except Exception as e:
             _LOGGER.error(f"Failed to establish base BLE connection: {e}")
@@ -183,8 +186,8 @@ class FridgeApi:
         if not self._client.is_connected:
             _LOGGER.error("Cannot send, not connected")
             return
-        _LOGGER.debug(f"--> SENDING: {packet.hex()}")
-        await self._client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, packet, response=False)
+        _LOGGER.debug(f"--> SENDING: {packet.hex()} (requires_response={self._write_requires_response})")
+        await self._client.write_gatt_char(FRIDGE_RW_CHARACTERISTIC_UUID, packet, response=self._write_requires_response)
 
     async def update_status(self):
         """Request status and wait for notification."""
