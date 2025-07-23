@@ -1,6 +1,5 @@
 """Climate platform for the Alpicool BLE integration."""
 
-import asyncio
 import logging
 from typing import Any
 
@@ -12,18 +11,17 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import FridgeApi
 from .const import (
-    CONF_DUAL_ZONE_MODES,
+    CONF_DUAL_MODE_FRIDGE,
     DOMAIN,
     PRESET_ECO,
     PRESET_FREEZER,
     PRESET_FRIDGE,
     PRESET_MAX,
 )
+from .coordinator import AlpicoolDeviceUpdateCoordinator
 from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,13 +33,20 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Alpicool climate entities based on initial status."""
-    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AlpicoolDeviceUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = [AlpicoolClimateZone(entry, api, "left")]
+    # We need the initial data to know if it's a dual-zone model
+    if coordinator.data is None:
+        _LOGGER.warning(
+            "No initial data from coordinator, climate entity setup deferred"
+        )
+        return
 
-    if "right_current" in api.status:
-        _LOGGER.debug("Dual-zone fridge detected, adding right zone entity")
-        entities.append(AlpicoolClimateZone(entry, api, "right"))
+    entities = [AlpicoolClimateZone(coordinator, entry, "left")]
+
+    if "right_current" in coordinator.data:
+        _LOGGER.debug("Dual-mode fridge detected, adding right zone entity")
+        entities.append(AlpicoolClimateZone(coordinator, entry, "right"))
 
     async_add_entities(entities)
 
@@ -58,20 +63,28 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
 
-    def __init__(self, entry: ConfigEntry, api: FridgeApi, zone: str) -> None:
+    def __init__(
+        self,
+        coordinator: AlpicoolDeviceUpdateCoordinator,
+        entry: ConfigEntry,
+        zone: str,
+    ) -> None:
         """Initialize the climate entity for a specific zone."""
-        super().__init__(entry, api)
+        super().__init__(coordinator)
         self._zone = zone
-        # Read the configuration option selected by the user
-        self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_ZONE_MODES, False)
+        self._entry = entry
+        self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_MODE_FRIDGE, False)
 
         self._attr_unique_id = f"{self._address}_{self._zone}"
-        self._attr_name = f"{self._zone.capitalize()}"
+        self._attr_name = f"{entry.data['name']} {self._zone.capitalize()}"
 
     @property
     def _is_dual_zone(self) -> bool:
         """Helper to check if this is a dual-zone model."""
-        return "right_current" in self.api.status
+        return (
+            self.coordinator.data is not None
+            and "right_current" in self.coordinator.data
+        )
 
     @property
     def preset_modes(self) -> list[str] | None:
@@ -81,42 +94,34 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         return [PRESET_MAX, PRESET_ECO]
 
     @property
-    def available(self) -> bool:
-        """Return True if the device and this specific zone are available."""
-        if not super().available:
-            return False
-
-        # For configured dual-zone models, the right zone is only available in Freezer mode
-        if (
-            self._is_dual_zone
-            and self._has_fridge_freezer_mode
-            and self._zone == "right"
-        ):
-            # run_mode 0 is Fridge, 1 is Freezer
-            if self.api.status.get("run_mode") == 0:
-                return False
-
-        return True
-
-    @property
     def hvac_mode(self) -> HVACMode | None:
         """Return hvac operation."""
-        return HVACMode.COOL if self.api.status.get("powered_on") else HVACMode.OFF
+        if self.coordinator.data is None:
+            return None
+        return (
+            HVACMode.COOL if self.coordinator.data.get("powered_on") else HVACMode.OFF
+        )
 
     @property
     def current_temperature(self) -> float | None:
         """Return the current temperature for this zone."""
-        return self.api.status.get(f"{self._zone}_current")
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get(f"{self._zone}_current")
 
     @property
     def target_temperature(self) -> float | None:
         """Return the target temperature for this zone."""
-        return self.api.status.get(f"{self._zone}_target")
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.get(f"{self._zone}_target")
 
     @property
     def preset_mode(self) -> str | None:
         """Return the current preset mode, adapted for user configuration."""
-        run_mode = self.api.status.get("run_mode")
+        if self.coordinator.data is None:
+            return None
+        run_mode = self.coordinator.data.get("run_mode")
         if self._is_dual_zone and self._has_fridge_freezer_mode:
             return PRESET_FREEZER if run_mode == 1 else PRESET_FRIDGE
         return PRESET_ECO if run_mode == 1 else PRESET_MAX
@@ -124,27 +129,22 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
-        await self.api.async_set_values({"powered_on": is_on})
-
-        await asyncio.sleep(0.5)
-        if await self.api.update_status():
-            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+        await self.coordinator.send_command(
+            self.coordinator.api.async_set_values, {"powered_on": is_on}
+        )
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
-            await self.api.async_set_temperature(self._zone, temp)
-
-            await asyncio.sleep(0.5)
-            if await self.api.update_status():
-                async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+            await self.coordinator.send_command(
+                self.coordinator.api.async_set_temperature, self._zone, temp
+            )
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         is_mode_1 = preset_mode in [PRESET_ECO, PRESET_FREEZER]
         run_mode_value = 1 if is_mode_1 else 0
-        await self.api.async_set_values({"run_mode": run_mode_value})
-        await asyncio.sleep(0.5)
-        if await self.api.update_status():
-            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+        await self.coordinator.send_command(
+            self.coordinator.api.async_set_values, {"run_mode": run_mode_value}
+        )

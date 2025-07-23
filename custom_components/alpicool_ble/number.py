@@ -8,8 +8,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import FridgeApi
 from .const import DOMAIN
+from .coordinator import AlpicoolDeviceUpdateCoordinator
 from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,10 +40,10 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Alpicool number entities."""
-    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AlpicoolDeviceUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        AlpicoolNumber(entry, api, number_key, number_def)
+        AlpicoolNumber(coordinator, entry, number_key, number_def)
         for number_key, number_def in NUMBERS.items()
     ]
     async_add_entities(entities)
@@ -55,28 +55,33 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(
-        self, entry: ConfigEntry, api: FridgeApi, number_key: str, number_def: dict
+        self,
+        coordinator: AlpicoolDeviceUpdateCoordinator,
+        entry: ConfigEntry,
+        number_key: str,
+        number_def: dict,
     ) -> None:
         """Initialize the number entity."""
-        super().__init__(entry, api)
+        super().__init__(coordinator)
         self._number_key = number_key
-        self._number_def = number_def
 
         self._attr_unique_id = f"{self._address}_{self._number_key}"
-        self._attr_name = f"{entry.data['name']} {self._number_def['name']}"
-        self._attr_native_min_value = self._number_def["min"]
-        self._attr_native_max_value = self._number_def["max"]
-        self._attr_native_step = self._number_def["step"]
-        self._attr_mode = self._number_def["mode"]
-        self._attr_native_unit_of_measurement = self._number_def.get("unit")
+        self._attr_name = f"{entry.data['name']} {number_def['name']}"
+        self._attr_native_min_value = number_def["min"]
+        self._attr_native_max_value = number_def["max"]
+        self._attr_native_step = number_def["step"]
+        self._attr_mode = number_def["mode"]
+        self._attr_native_unit_of_measurement = number_def.get("unit")
 
     @property
     def native_value(self) -> float | None:
         """Return the state of the number entity."""
-        if not self.available:
+        if self.coordinator.data is None:
             return None
-        return self.api.status.get(self._number_key)
+        return self.coordinator.data.get(self._number_key)
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        await self.api.async_set_values({self._number_key: int(value)})
+        await self.coordinator.send_command(
+            self.coordinator.api.async_set_values, {self._number_key: int(value)}
+        )

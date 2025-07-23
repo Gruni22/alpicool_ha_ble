@@ -14,8 +14,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import FridgeApi
 from .const import DOMAIN
+from .coordinator import AlpicoolDeviceUpdateCoordinator
 from .entity import AlpicoolEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,10 +48,10 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the Alpicool sensor entities."""
-    api: FridgeApi = hass.data[DOMAIN][entry.entry_id]
+    coordinator: AlpicoolDeviceUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     entities = [
-        AlpicoolSensor(entry, api, sensor_key, sensor_def)
+        AlpicoolSensor(coordinator, entry, sensor_key, sensor_def)
         for sensor_key, sensor_def in SENSORS.items()
     ]
     async_add_entities(entities)
@@ -61,10 +61,14 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     """Representation of an Alpicool Sensor."""
 
     def __init__(
-        self, entry: ConfigEntry, api: FridgeApi, sensor_key: str, sensor_def: dict
+        self,
+        coordinator: AlpicoolDeviceUpdateCoordinator,
+        entry: ConfigEntry,
+        sensor_key: str,
+        sensor_def: dict,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(entry, api)
+        super().__init__(coordinator)
         self._sensor_key = sensor_key
         self._sensor_def = sensor_def
 
@@ -78,8 +82,8 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
     @property
     def native_value(self) -> float | None:
         """Return the state of the sensor."""
-        if not self.available or not self.api.status:
+        if self.coordinator.data is None:
             return None
 
         value_fn: Callable = self._sensor_def["value_fn"]
-        return value_fn(self.api.status)
+        return value_fn(self.coordinator.data)
