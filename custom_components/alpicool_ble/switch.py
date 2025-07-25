@@ -44,6 +44,13 @@ class AlpicoolLockSwitch(AlpicoolEntity, SwitchEntity):
         self._attr_name = f"{entry.data['name']} Lock"
 
     @property
+    def available(self) -> bool:
+        """Return True if the entity is available."""
+        # The lock switch is only available if the base entity is available
+        # AND the fridge is powered on.
+        return super().available and self.coordinator.data.get("powered_on", False)
+
+    @property
     def is_on(self) -> bool | None:
         """Return true if the lock is on."""
         if self.coordinator.data is None:

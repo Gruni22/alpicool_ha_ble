@@ -20,13 +20,13 @@ _LOGGER = logging.getLogger(__name__)
 class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
     """Manages fetching data and sending commands to the Alpicool device."""
 
-    def __init__(self, hass: HomeAssistant, address: str) -> None:
+    def __init__(self, hass: HomeAssistant, address: str, poll_interval: int) -> None:
         """Initialize the data update coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=f"Alpicool {address}",
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(seconds=poll_interval),
         )
         self.address = address
         self.api = AlpicoolApi()
@@ -46,7 +46,7 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
             await self.api.async_start_notifications(client)
             if not self._is_bound_this_session:
                 # Optional: BIND only on the first connection after HA start
-                #await self.api.async_send_bind(client)
+                # await self.api.async_send_bind(client)
                 self._is_bound_this_session = True
             return await self.api.get_status(client)
         except (AlpicoolConnectionError, BleakError) as e:
@@ -82,21 +82,24 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
             if not self._is_bound_this_session:
                 await self.api.async_send_bind(client)
                 self._is_bound_this_session = True
-            
+
             # Send the actual command
             if api_method.__name__ == "async_set_values":
                 await api_method(client, self.data, *args)
             else:
                 await api_method(client, *args)
-            
-            _LOGGER.debug("Command sent successfully to %s, now fetching new status.", self.address)
+
+            _LOGGER.debug(
+                "Command sent successfully to %s, now fetching new status",
+                self.address,
+            )
 
             # Give the device a moment to process the command
             await asyncio.sleep(0.5)
 
             # Get the new status on the same connection to confirm the change
             new_status = await self.api.get_status(client)
-            
+
             # Update the coordinator's data directly with the confirmed new state
             self.async_set_updated_data(new_status)
 

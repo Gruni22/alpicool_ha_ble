@@ -140,9 +140,10 @@ class AlpicoolApi:
                         "right_current": _to_signed_byte(payload[26]),
                     }
                 )
-            return status
         except IndexError as e:
             raise AlpicoolApiError(f"Failed to decode status payload: {e}") from e
+        else:
+            return status
 
     def _notification_handler(self, sender, data: bytearray):
         """Handle incoming notifications."""
@@ -186,7 +187,7 @@ class AlpicoolApi:
         try:
             await asyncio.wait_for(self._bind_event.wait(), timeout=20)
             _LOGGER.debug("Bind successful")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _LOGGER.debug("Bind timed out, proceeding without it")
 
     async def get_status(self, client: BleakClient) -> dict:

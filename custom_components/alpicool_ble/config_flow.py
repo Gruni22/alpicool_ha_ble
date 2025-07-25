@@ -11,7 +11,7 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
 
-from .const import CONF_DUAL_MODE_FRIDGE, DOMAIN
+from .const import CONF_DUAL_MODE_FRIDGE, CONF_POLL_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +69,7 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
                         CONF_DUAL_MODE_FRIDGE: user_input.get(
                             CONF_DUAL_MODE_FRIDGE, False
                         ),
+                        CONF_POLL_INTERVAL: user_input.get(CONF_POLL_INTERVAL, 30),
                     },
                 )
 
@@ -82,6 +83,7 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_ADDRESS, default=default_address): str,
                 vol.Optional(CONF_NAME, default=default_name): str,
                 vol.Optional(CONF_DUAL_MODE_FRIDGE, default=False): bool,
+                vol.Optional(CONF_POLL_INTERVAL, default=30): int,
             }
         )
 

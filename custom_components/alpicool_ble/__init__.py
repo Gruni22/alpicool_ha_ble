@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import CONF_POLL_INTERVAL, DOMAIN
 from .coordinator import AlpicoolDeviceUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,8 +23,9 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Alpicool BLE from a config entry."""
     address = entry.data["address"]
+    poll_interval = entry.data.get(CONF_POLL_INTERVAL, 30)
 
-    coordinator = AlpicoolDeviceUpdateCoordinator(hass, address)
+    coordinator = AlpicoolDeviceUpdateCoordinator(hass, address, poll_interval)
 
     # This will do the first fetch and raise ConfigEntryNotReady if it fails
     await coordinator.async_config_entry_first_refresh()

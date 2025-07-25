@@ -9,6 +9,7 @@ FRIDGE_NOTIFY_UUID = "00001236-0000-1000-8000-00805f9b34fb"
 
 # --- Configuration Options ---
 CONF_DUAL_MODE_FRIDGE = "dual_mode_fridge"
+CONF_POLL_INTERVAL = "poll_interval"
 
 # --- Presets ---
 PRESET_ECO = "Eco"

@@ -1,4 +1,5 @@
 """Base entity for the Alpicool BLE integration."""
+
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
