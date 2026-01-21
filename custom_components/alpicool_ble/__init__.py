@@ -2,7 +2,7 @@
 
 import logging
 
-from bleak import BleakError
+from bleak.exc import BleakError
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform

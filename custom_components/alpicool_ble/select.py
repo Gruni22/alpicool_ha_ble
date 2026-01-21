@@ -4,8 +4,8 @@ import logging
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
@@ -51,6 +51,8 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
 
         bat_saver_value = self.api.status.get("bat_saver")
         # Map the numeric value (0, 1, 2) to the string ("Low", "Medium", "High")
+        if bat_saver_value is None:
+            return None
         return BATTERY_SAVER_MAP_REV.get(bat_saver_value)
 
     async def async_select_option(self, option: str) -> None:

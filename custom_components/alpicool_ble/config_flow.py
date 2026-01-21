@@ -52,12 +52,15 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             raw_address = user_input.get(CONF_ADDRESS)
-            normalized_address = normalize_ble_address(raw_address)
-
-            if not normalized_address:
+            if not isinstance(raw_address, str):
                 errors["base"] = "invalid_address"
             else:
-                name = user_input.get(CONF_NAME, normalized_address)
+                normalized_address = normalize_ble_address(raw_address)
+
+                if not normalized_address:
+                    errors["base"] = "invalid_address"
+                else:
+                    name = user_input.get(CONF_NAME, normalized_address)
                 await self.async_set_unique_id(normalized_address)
                 self._abort_if_unique_id_configured()
 

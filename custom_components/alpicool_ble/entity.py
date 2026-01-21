@@ -2,7 +2,8 @@
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import DeviceInfo, Entity
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .api import FridgeApi
 from .const import DOMAIN
