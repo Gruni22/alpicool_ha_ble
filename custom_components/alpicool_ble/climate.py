@@ -47,10 +47,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     """Representation of an Alpicool refrigerator zone."""
 
     _attr_hvac_modes = [HVACMode.COOL, HVACMode.OFF]
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 1.0
-    _attr_min_temp = -20
-    _attr_max_temp = 20
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
@@ -69,6 +66,32 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     def _is_dual_zone(self) -> bool:
         """Helper to check if this is a dual-zone model."""
         return "right_current" in self.api.status
+
+    @property
+    def _is_fahrenheit(self) -> bool:
+        """Check if the device is set to Fahrenheit (unit=1)."""
+        return self.api.status.get("unit", 0) == 1
+
+    @property
+    def temperature_unit(self) -> str:
+        """Return the unit of measurement based on device setting."""
+        if self._is_fahrenheit:
+            return UnitOfTemperature.FAHRENHEIT
+        return UnitOfTemperature.CELSIUS
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum temperature based on device unit."""
+        if self._is_fahrenheit:
+            return -4  # -20°C = -4°F
+        return -20
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum temperature based on device unit."""
+        if self._is_fahrenheit:
+            return 68  # 20°C = 68°F
+        return 20
 
     @property
     def preset_modes(self) -> list[str] | None:
