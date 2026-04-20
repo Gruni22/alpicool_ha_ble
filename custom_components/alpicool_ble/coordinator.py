@@ -20,7 +20,13 @@ _LOGGER = logging.getLogger(__name__)
 class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
     """Manages fetching data and sending commands to the Alpicool device."""
 
-    def __init__(self, hass: HomeAssistant, address: str, poll_interval: int) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        address: str,
+        device_name: str,
+        poll_interval: int,
+    ) -> None:
         """Initialize the data update coordinator."""
         super().__init__(
             hass,
@@ -29,6 +35,7 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
             update_interval=timedelta(seconds=poll_interval),
         )
         self.address = address
+        self.device_name = device_name
         self.api = AlpicoolApi()
         self._is_bound_this_session = False
 
@@ -45,8 +52,8 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
             await client.connect()
             await self.api.async_start_notifications(client)
             if not self._is_bound_this_session:
-                # Optional: BIND only on the first connection after HA start
-                # await self.api.async_send_bind(client)
+                # BIND is not required by this device. The flag prevents
+                # _execute_command from attempting it on subsequent connections.
                 self._is_bound_this_session = True
             return await self.api.get_status(client)
         except (AlpicoolConnectionError, BleakError) as e:
@@ -57,12 +64,12 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
             if client.is_connected:
                 await client.disconnect()
 
-    async def send_command(
+    async def _execute_command(
         self,
         api_method: Callable[..., Coroutine[Any, Any, None]],
         *args: Any,
     ) -> None:
-        """Send a command to the device and schedule a refresh."""
+        """Connect to device, execute api_method, then fetch updated status."""
         if self.data is None:
             _LOGGER.warning("Cannot send command, no valid data available yet")
             return
@@ -78,35 +85,21 @@ class AlpicoolDeviceUpdateCoordinator(DataUpdateCoordinator[dict]):
         try:
             await client.connect()
             await self.api.async_start_notifications(client)
-            # Ensure BIND is performed if it's the first action in the session
-            if not self._is_bound_this_session:
-                await self.api.async_send_bind(client)
-                self._is_bound_this_session = True
-
-            # Send the actual command
-            if api_method.__name__ == "async_set_values":
-                await api_method(client, self.data, *args)
-            else:
-                await api_method(client, *args)
-
-            _LOGGER.debug(
-                "Command sent successfully to %s, now fetching new status",
-                self.address,
-            )
-
-            # Give the device a moment to process the command
+            await api_method(client, *args)
             await asyncio.sleep(0.5)
-
-            # Get the new status on the same connection to confirm the change
             new_status = await self.api.get_status(client)
-
-            # Update the coordinator's data directly with the confirmed new state
             self.async_set_updated_data(new_status)
-
         except (AlpicoolApiError, BleakError) as e:
-            _LOGGER.error("Error during send_command to %s: %s", self.address, e)
-            # Trigger a full refresh to attempt recovery
+            _LOGGER.error("Error during command to %s: %s", self.address, e)
             await self.async_request_refresh()
         finally:
             if client.is_connected:
                 await client.disconnect()
+
+    async def async_set_values(self, new_values: dict) -> None:
+        """Set configuration values on the device."""
+        await self._execute_command(self.api.async_set_values, self.data, new_values)
+
+    async def async_set_temperature(self, zone: str, temp: int) -> None:
+        """Set the target temperature for a zone."""
+        await self._execute_command(self.api.async_set_temperature, zone, temp)

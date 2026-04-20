@@ -33,6 +33,17 @@ NUMBERS = {
     },
 }
 
+RIGHT_ZONE_NUMBERS = {
+    "right_ret_diff": {
+        "name": "Right Hysteresis",
+        "min": 1,
+        "max": 10,
+        "step": 1,
+        "mode": NumberMode.SLIDER,
+        "unit": "°C",
+    },
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -46,6 +57,13 @@ async def async_setup_entry(
         AlpicoolNumber(coordinator, entry, number_key, number_def)
         for number_key, number_def in NUMBERS.items()
     ]
+
+    if coordinator.data and "right_current" in coordinator.data:
+        entities.extend(
+            AlpicoolNumber(coordinator, entry, key, defn)
+            for key, defn in RIGHT_ZONE_NUMBERS.items()
+        )
+
     async_add_entities(entities)
 
 
@@ -82,6 +100,4 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        await self.coordinator.send_command(
-            self.coordinator.api.async_set_values, {self._number_key: int(value)}
-        )
+        await self.coordinator.async_set_values({self._number_key: int(value)})

@@ -8,8 +8,9 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.core import callback
 
 from .const import CONF_DUAL_MODE_FRIDGE, CONF_POLL_INTERVAL, DOMAIN
 
@@ -32,6 +33,12 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> AlpicoolOptionsFlow:
+        """Return the options flow handler."""
+        return AlpicoolOptionsFlow(config_entry)
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
@@ -91,4 +98,38 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=data_schema,
             errors=errors,
+        )
+
+
+class AlpicoolOptionsFlow(OptionsFlow):
+    """Handle options for Alpicool BLE."""
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        """Initialize the options flow."""
+        self._entry = entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle the options step."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_dual_mode = self._entry.options.get(
+            CONF_DUAL_MODE_FRIDGE,
+            self._entry.data.get(CONF_DUAL_MODE_FRIDGE, False),
+        )
+        current_poll = self._entry.options.get(
+            CONF_POLL_INTERVAL,
+            self._entry.data.get(CONF_POLL_INTERVAL, 30),
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(CONF_DUAL_MODE_FRIDGE, default=current_dual_mode): bool,
+                    vol.Optional(CONF_POLL_INTERVAL, default=current_poll): int,
+                }
+            ),
         )

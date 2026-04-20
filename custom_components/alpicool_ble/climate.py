@@ -73,7 +73,9 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         super().__init__(coordinator)
         self._zone = zone
         self._entry = entry
-        self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_MODE_FRIDGE, False)
+        self._has_fridge_freezer_mode = entry.options.get(
+            CONF_DUAL_MODE_FRIDGE, entry.data.get(CONF_DUAL_MODE_FRIDGE, False)
+        )
 
         self._attr_unique_id = f"{self._address}_{self._zone}"
         self._attr_name = f"{entry.data['name']} {self._zone.capitalize()}"
@@ -128,23 +130,16 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
-        is_on = hvac_mode == HVACMode.COOL
-        await self.coordinator.send_command(
-            self.coordinator.api.async_set_values, {"powered_on": is_on}
-        )
+        await self.coordinator.async_set_values({"powered_on": hvac_mode == HVACMode.COOL})
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
-            temp = int(kwargs[ATTR_TEMPERATURE])
-            await self.coordinator.send_command(
-                self.coordinator.api.async_set_temperature, self._zone, temp
+            await self.coordinator.async_set_temperature(
+                self._zone, int(kwargs[ATTR_TEMPERATURE])
             )
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
-        is_mode_1 = preset_mode in [PRESET_ECO, PRESET_FREEZER]
-        run_mode_value = 1 if is_mode_1 else 0
-        await self.coordinator.send_command(
-            self.coordinator.api.async_set_values, {"run_mode": run_mode_value}
-        )
+        run_mode_value = 1 if preset_mode in [PRESET_ECO, PRESET_FREEZER] else 0
+        await self.coordinator.async_set_values({"run_mode": run_mode_value})

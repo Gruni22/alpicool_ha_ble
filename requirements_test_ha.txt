@@ -1,0 +1,3 @@
+# Nur Linux / WSL2 / GitHub Actions CI
+-r requirements_test.txt
+pytest-homeassistant-custom-component>=0.13

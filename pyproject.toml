@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "ha_integration: requires homeassistant (Linux / WSL2 / CI only)",
+]
+
+[tool.ruff]
+target-version = "py312"

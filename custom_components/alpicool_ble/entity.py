@@ -18,7 +18,7 @@ class AlpicoolEntity(CoordinatorEntity[AlpicoolDeviceUpdateCoordinator]):
         self._address = coordinator.address
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._address)},
-            name=f"Alpicool {self._address}",
+            name=coordinator.device_name,
             manufacturer="Alpicool",
         )
 

@@ -178,6 +178,9 @@ class AlpicoolApi:
 
     async def async_start_notifications(self, client: BleakClient):
         """Start listening for notifications."""
+        self._notification_buffer.clear()
+        self._status_updated_event.clear()
+        self._bind_event.clear()
         await client.start_notify(FRIDGE_NOTIFY_UUID, self._notification_handler)
 
     async def async_send_bind(self, client: BleakClient):
