@@ -1,5 +1,5 @@
-tests/__pycache__/
-.settings/AI_INST.md
-.settings/settings.local.json
-custom_components/__pycache__/
-custom_components/alpicool_ble/__pycache__/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/

@@ -1,0 +1,8 @@
+# Install with: python -m venv .venv && .venv/bin/pip install -r requirements-test.txt
+homeassistant
+pytest
+pytest-homeassistant-custom-component
+bleak-retry-connector
+# pulled in by homeassistant.components.bluetooth on import
+aiousbwatcher
+pyserial
