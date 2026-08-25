@@ -1,0 +1,45 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Alpicool BLE fridge",
+        "description": "Confirm the Bluetooth address of your fridge. Only one client can be connected at a time, so close the vendor app before finishing setup.",
+        "data": {
+          "address": "Bluetooth address",
+          "name": "Name",
+          "dual_zone_modes": "Fridge/Freezer mode instead of Max/Eco"
+        },
+        "data_description": {
+          "address": "Accepted as AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff or aabbccddeeff.",
+          "name": "Shown as the device name in Home Assistant.",
+          "dual_zone_modes": "Leave this off unless your dual zone fridge switches between a combined Fridge mode and a Freezer mode. It does not control whether a second zone is created — that is detected automatically. With this on, the second zone is only available while the fridge is in Freezer mode."
+        }
+      }
+    },
+    "error": {
+      "invalid_address": "That is not a valid Bluetooth address. Use AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff or aabbccddeeff."
+    },
+    "abort": {
+      "already_configured": "This fridge is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alpicool BLE options",
+        "description": "Changing these reloads the integration.",
+        "data": {
+          "dual_zone_modes": "Fridge/Freezer mode instead of Max/Eco",
+          "left_name": "Name of the first zone",
+          "right_name": "Name of the second zone"
+        },
+        "data_description": {
+          "dual_zone_modes": "Leave this off unless your dual zone fridge switches between a combined Fridge mode and a Freezer mode. It does not control whether a second zone is created — that is detected automatically.",
+          "left_name": "For example Left, Top or Fridge.",
+          "right_name": "For example Right, Bottom or Freezer. Only used on dual zone models."
+        }
+      }
+    }
+  }
+}

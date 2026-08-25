@@ -1,7 +1,5 @@
 """The Alpicool BLE integration."""
 
-import logging
-
 from bleak.exc import BleakError
 
 from homeassistant.config_entries import ConfigEntry
@@ -12,8 +10,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import FridgeApi
 from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -29,8 +25,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     address = entry.data["address"]
 
-    api = FridgeApi(address)
+    api = FridgeApi(hass, address)
     hass.data[DOMAIN][entry.entry_id] = api
+
+    # Reconnect as soon as the fridge shows up again instead of waiting for the
+    # next poll tick.
+    entry.async_on_unload(api.async_register_advertisement_callback())
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     try:
         if not await api.connect():
@@ -62,9 +63,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    api: FridgeApi = hass.data[DOMAIN].pop(entry.entry_id)
-    await api.disconnect()
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        api: FridgeApi = hass.data[DOMAIN].pop(entry.entry_id)
+        await api.disconnect()
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return unload_ok

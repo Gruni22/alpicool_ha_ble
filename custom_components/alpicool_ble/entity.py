@@ -1,5 +1,7 @@
 """Models for the Alpicool BLE integration."""
 
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
@@ -7,6 +9,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 
 from .api import FridgeApi
 from .const import DOMAIN
+
+
+def get_option(entry: ConfigEntry, key: str, default: Any) -> Any:
+    """Read a setting, preferring the options flow over the original setup data."""
+    return entry.options.get(key, entry.data.get(key, default))
 
 
 class AlpicoolEntity(Entity):

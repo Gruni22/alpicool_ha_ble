@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import voluptuous as vol
 
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_ADDRESS, CONF_NAME
+from homeassistant.core import callback
 
-from .const import CONF_DUAL_ZONE_MODES, DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
+from .const import (
+    CONF_DUAL_ZONE_MODES,
+    CONF_LEFT_NAME,
+    CONF_RIGHT_NAME,
+    DEFAULT_LEFT_NAME,
+    DEFAULT_RIGHT_NAME,
+    DOMAIN,
+)
+from .entity import get_option
 
 
 def normalize_ble_address(addr: str) -> str | None:
@@ -33,6 +44,12 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
 
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> AlpicoolOptionsFlow:
+        """Return the options flow."""
+        return AlpicoolOptionsFlow()
+
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
@@ -48,19 +65,21 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the user step to finish setup."""
-        errors = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             raw_address = user_input.get(CONF_ADDRESS)
-            if not isinstance(raw_address, str):
+            normalized_address = (
+                normalize_ble_address(raw_address)
+                if isinstance(raw_address, str)
+                else None
+            )
+
+            if not normalized_address:
                 errors["base"] = "invalid_address"
             else:
-                normalized_address = normalize_ble_address(raw_address)
+                name = user_input.get(CONF_NAME) or normalized_address
 
-                if not normalized_address:
-                    errors["base"] = "invalid_address"
-                else:
-                    name = user_input.get(CONF_NAME, normalized_address)
                 await self.async_set_unique_id(normalized_address)
                 self._abort_if_unique_id_configured()
 
@@ -79,6 +98,9 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
             self._discovery_info.name if self._discovery_info else "Alpicool Fridge"
         )
         default_address = self._discovery_info.address if self._discovery_info else ""
+        if user_input is not None:
+            default_address = user_input.get(CONF_ADDRESS, default_address)
+            default_name = user_input.get(CONF_NAME, default_name)
 
         data_schema = vol.Schema(
             {
@@ -93,3 +115,34 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=data_schema,
             errors=errors,
         )
+
+
+class AlpicoolOptionsFlow(OptionsFlow):
+    """Handle changing settings of an already configured fridge."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        entry = self.config_entry
+        data_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_DUAL_ZONE_MODES,
+                    default=get_option(entry, CONF_DUAL_ZONE_MODES, False),
+                ): bool,
+                vol.Optional(
+                    CONF_LEFT_NAME,
+                    default=get_option(entry, CONF_LEFT_NAME, DEFAULT_LEFT_NAME),
+                ): str,
+                vol.Optional(
+                    CONF_RIGHT_NAME,
+                    default=get_option(entry, CONF_RIGHT_NAME, DEFAULT_RIGHT_NAME),
+                ): str,
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=data_schema)

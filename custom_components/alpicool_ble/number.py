@@ -1,18 +1,14 @@
 """Number platform for the Alpicool BLE integration."""
 
-import logging
-
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
 from .const import DOMAIN
 from .entity import AlpicoolEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 NUMBERS = {
     "left_ret_diff": {
@@ -21,7 +17,8 @@ NUMBERS = {
         "max": 10,
         "step": 1,
         "mode": NumberMode.SLIDER,
-        "unit": "°C",
+        # A temperature difference in whatever unit the fridge is set to.
+        "is_temperature": True,
     },
     "start_delay": {
         "name": "Start Delay",
@@ -68,7 +65,15 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
         self._attr_native_max_value = self._number_def["max"]
         self._attr_native_step = self._number_def["step"]
         self._attr_mode = self._number_def["mode"]
-        self._attr_native_unit_of_measurement = self._number_def.get("unit")
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the unit, following the fridge's own Celsius/Fahrenheit setting."""
+        if not self._number_def.get("is_temperature"):
+            return self._number_def.get("unit")
+        if self.api.is_fahrenheit:
+            return UnitOfTemperature.FAHRENHEIT
+        return UnitOfTemperature.CELSIUS
 
     @property
     def native_value(self) -> float | None:

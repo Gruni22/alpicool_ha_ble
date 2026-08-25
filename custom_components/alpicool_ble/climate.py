@@ -15,13 +15,21 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .api import FridgeApi
 from .const import (
     CONF_DUAL_ZONE_MODES,
+    CONF_LEFT_NAME,
+    CONF_RIGHT_NAME,
+    DEFAULT_LEFT_NAME,
+    DEFAULT_MAX_TEMP_C,
+    DEFAULT_MAX_TEMP_F,
+    DEFAULT_MIN_TEMP_C,
+    DEFAULT_MIN_TEMP_F,
+    DEFAULT_RIGHT_NAME,
     DOMAIN,
     PRESET_ECO,
     PRESET_FREEZER,
     PRESET_FRIDGE,
     PRESET_MAX,
 )
-from .entity import AlpicoolEntity
+from .entity import AlpicoolEntity, get_option
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,10 +55,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     """Representation of an Alpicool refrigerator zone."""
 
     _attr_hvac_modes = [HVACMode.COOL, HVACMode.OFF]
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 1.0
-    _attr_min_temp = -20
-    _attr_max_temp = 20
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
     )
@@ -60,15 +65,56 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         super().__init__(entry, api)
         self._zone = zone
         # Read the configuration option selected by the user
-        self._has_fridge_freezer_mode = entry.data.get(CONF_DUAL_ZONE_MODES, False)
+        self._has_fridge_freezer_mode = get_option(entry, CONF_DUAL_ZONE_MODES, False)
+
+        name_key, default_name = (
+            (CONF_LEFT_NAME, DEFAULT_LEFT_NAME)
+            if zone == "left"
+            else (CONF_RIGHT_NAME, DEFAULT_RIGHT_NAME)
+        )
 
         self._attr_unique_id = f"{self._address}_{self._zone}"
-        self._attr_name = f"{self._zone.capitalize()}"
+        self._attr_name = get_option(entry, name_key, default_name) or default_name
 
     @property
     def _is_dual_zone(self) -> bool:
         """Helper to check if this is a dual-zone model."""
         return "right_current" in self.api.status
+
+    @property
+    def temperature_unit(self) -> str:
+        """Return the unit the fridge itself is set to.
+
+        All temperatures on the wire are plain integers in that unit, so the
+        fridge setting has to be mirrored here instead of assuming Celsius.
+        """
+        if self.api.is_fahrenheit:
+            return UnitOfTemperature.FAHRENHEIT
+        return UnitOfTemperature.CELSIUS
+
+    @property
+    def _temp_limits(self) -> tuple[float, float]:
+        """Return the selectable target range in the fridge's own unit."""
+        if self.api.is_fahrenheit:
+            defaults = (DEFAULT_MIN_TEMP_F, DEFAULT_MAX_TEMP_F)
+        else:
+            defaults = (DEFAULT_MIN_TEMP_C, DEFAULT_MAX_TEMP_C)
+
+        low = self.api.status.get("temp_min")
+        high = self.api.status.get("temp_max")
+        if isinstance(low, int) and isinstance(high, int) and low < high:
+            return (low, high)
+        return defaults
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum target temperature."""
+        return self._temp_limits[0]
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum target temperature."""
+        return self._temp_limits[1]
 
     @property
     def preset_modes(self) -> list[str] | None:

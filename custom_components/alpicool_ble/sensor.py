@@ -1,7 +1,6 @@
 """Sensor platform for the Alpicool BLE integration."""
 
 from collections.abc import Callable
-import logging
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,8 +15,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .api import FridgeApi
 from .const import DOMAIN
 from .entity import AlpicoolEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 SENSORS = {
     "battery_percent": {

@@ -1,0 +1,45 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Alpicool-BLE-Kühlbox",
+        "description": "Bluetooth-Adresse der Kühlbox bestätigen. Es kann immer nur ein Gerät gleichzeitig verbunden sein – schließe daher vorher die Hersteller-App.",
+        "data": {
+          "address": "Bluetooth-Adresse",
+          "name": "Name",
+          "dual_zone_modes": "Kühl-/Gefriermodus statt Max/Eco"
+        },
+        "data_description": {
+          "address": "Möglich sind AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff oder aabbccddeeff.",
+          "name": "Wird als Gerätename in Home Assistant angezeigt.",
+          "dual_zone_modes": "Nur aktivieren, wenn deine Zwei-Zonen-Kühlbox zwischen einem kombinierten Kühlmodus und einem Gefriermodus umschaltet. Die Option steuert nicht, ob eine zweite Zone angelegt wird – das wird automatisch erkannt. Ist sie aktiv, ist die zweite Zone nur im Gefriermodus verfügbar."
+        }
+      }
+    },
+    "error": {
+      "invalid_address": "Das ist keine gültige Bluetooth-Adresse. Nutze AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff oder aabbccddeeff."
+    },
+    "abort": {
+      "already_configured": "Diese Kühlbox ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Alpicool-BLE-Optionen",
+        "description": "Änderungen laden die Integration neu.",
+        "data": {
+          "dual_zone_modes": "Kühl-/Gefriermodus statt Max/Eco",
+          "left_name": "Name der ersten Zone",
+          "right_name": "Name der zweiten Zone"
+        },
+        "data_description": {
+          "dual_zone_modes": "Nur aktivieren, wenn deine Zwei-Zonen-Kühlbox zwischen einem kombinierten Kühlmodus und einem Gefriermodus umschaltet. Die Option steuert nicht, ob eine zweite Zone angelegt wird – das wird automatisch erkannt.",
+          "left_name": "Zum Beispiel Links, Oben oder Kühlfach.",
+          "right_name": "Zum Beispiel Rechts, Unten oder Gefrierfach. Wird nur bei Zwei-Zonen-Modellen verwendet."
+        }
+      }
+    }
+  }
+}

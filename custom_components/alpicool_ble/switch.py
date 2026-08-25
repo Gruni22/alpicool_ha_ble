@@ -1,6 +1,5 @@
 """Switch platform for the Alpicool BLE integration."""
 
-import logging
 from typing import Any
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
@@ -12,8 +11,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .api import FridgeApi
 from .const import DOMAIN
 from .entity import AlpicoolEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(

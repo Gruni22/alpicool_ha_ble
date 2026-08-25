@@ -1,12 +1,30 @@
 """API for Alpicool fridges based on modern BLE protocol."""
 
 import asyncio
+from collections.abc import Callable
 import logging
 
 from bleak import BleakClient
+from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
+from bleak_retry_connector import establish_connection
 
-from .const import FRIDGE_NOTIFY_UUID, FRIDGE_RW_CHARACTERISTIC_UUID, Request
+from homeassistant.components import bluetooth
+from homeassistant.components.bluetooth.match import BluetoothCallbackMatcher
+from homeassistant.core import HomeAssistant, callback
+
+from .const import (
+    DEFAULT_MAX_WRITE_SIZE,
+    FRIDGE_NOTIFY_UUID,
+    FRIDGE_RW_CHARACTERISTIC_UUID,
+    POLL_INTERVAL,
+    RECONNECT_BACKOFF,
+    RECONNECT_INTERVAL,
+    UNAVAILABLE_AFTER,
+    UNIT_FAHRENHEIT,
+    WRITE_CHUNK_DELAY,
+    Request,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,20 +37,34 @@ def _to_signed_byte(b: int) -> int:
 class FridgeApi:
     """A class to interact with the fridge."""
 
-    def __init__(self, address: str) -> None:
+    def __init__(self, hass: HomeAssistant, address: str) -> None:
         """Initialize the API."""
         self._lock = asyncio.Lock()
         self.status = {}
         self._status_updated_event = asyncio.Event()
         self._bind_event = asyncio.Event()
-        self._poll_task = None
+        self._advertisement_event = asyncio.Event()
+        self._hass = hass
         self._address = address
-        self._client = BleakClient(self._address, timeout=30.0)
+        # A client is only created for an actual connection attempt, from a
+        # BLEDevice that Home Assistant has just seen. Holding on to one across
+        # reconnects is what kept the fridge unreachable until a reload.
+        self._client: BleakClient | None = None
         self._write_requires_response = False
         # Buffer for reassembling fragmented packets
         self._notification_buffer = bytearray()
         self.is_available: bool = True
         self._last_successful_update_time: float = 0.0
+
+    @property
+    def is_connected(self) -> bool:
+        """Return True if there is a live connection to the fridge."""
+        return self._client is not None and self._client.is_connected
+
+    @property
+    def is_fahrenheit(self) -> bool:
+        """Return True if the fridge reports and expects Fahrenheit values."""
+        return self.status.get("unit") == UNIT_FAHRENHEIT
 
     def set_initial_timestamp(self) -> None:
         """Set the initial timestamp after a successful setup."""
@@ -240,13 +272,87 @@ class FridgeApi:
             else:
                 _LOGGER.debug("Unhandled command in notification: %s", cmd)
 
+    @callback
+    def _async_ble_device(self) -> BLEDevice | None:
+        """Return the BLEDevice as last seen by any adapter or ESPHome proxy."""
+        return bluetooth.async_ble_device_from_address(
+            self._hass, self._address, connectable=True
+        )
+
+    @callback
+    def _async_on_disconnect(self, client: BleakClient) -> None:
+        """Handle the fridge or the proxy dropping the connection."""
+        _LOGGER.debug("Disconnected from %s", self._address)
+        self._notification_buffer.clear()
+
+    @callback
+    def async_register_advertisement_callback(self) -> Callable[[], None]:
+        """Reconnect as soon as the fridge is on air again.
+
+        Without this the polling loop would keep sleeping for up to a minute
+        after the fridge (or its Bluetooth proxy) is powered back on.
+        """
+
+        @callback
+        def _async_on_advertisement(
+            service_info: bluetooth.BluetoothServiceInfoBleak,
+            change: bluetooth.BluetoothChange,
+        ) -> None:
+            if not self.is_connected:
+                _LOGGER.debug("%s is advertising again", self._address)
+                self._advertisement_event.set()
+
+        return bluetooth.async_register_callback(
+            self._hass,
+            _async_on_advertisement,
+            BluetoothCallbackMatcher(address=self._address, connectable=True),
+            bluetooth.BluetoothScanningMode.PASSIVE,
+        )
+
+    async def _async_wait_for_advertisement(self) -> None:
+        """Back off before the next connection attempt, cut short by a new advert."""
+        self._advertisement_event.clear()
+        await asyncio.sleep(RECONNECT_BACKOFF)
+        try:
+            async with asyncio.timeout(RECONNECT_INTERVAL - RECONNECT_BACKOFF):
+                await self._advertisement_event.wait()
+        except TimeoutError:
+            return
+
+    async def _async_establish_connection(self) -> bool:
+        """Open a connection using a freshly resolved BLEDevice."""
+        device = self._async_ble_device()
+        if device is None:
+            _LOGGER.debug(
+                "No adapter or proxy has seen %s yet, not connecting", self._address
+            )
+            return False
+
+        try:
+            self._client = await establish_connection(
+                BleakClient,
+                device,
+                self._address,
+                self._async_on_disconnect,
+                use_services_cache=True,
+                ble_device_callback=lambda: self._async_ble_device() or device,
+            )
+        except (BleakError, TimeoutError) as e:
+            _LOGGER.debug("Failed to establish base BLE connection: %s", e)
+            self._client = None
+            return False
+        return True
+
     async def connect(self, is_reconnect: bool = False) -> bool:
         """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect")
-        try:
-            if not self._client.is_connected:
-                await self._client.connect()
+        if self.is_connected:
+            return True
 
+        if not await self._async_establish_connection():
+            return False
+
+        try:
             _LOGGER.debug("Discovering services and characteristics")
             write_char = None
             for service in self._client.services:
@@ -285,7 +391,7 @@ class FridgeApi:
             )
 
         except BleakError as e:
-            _LOGGER.error("Failed to establish base BLE connection: %s", e)
+            _LOGGER.error("Failed to set up the BLE connection: %s", e)
             await self.disconnect()
             return False
         if not is_reconnect:
@@ -308,7 +414,7 @@ class FridgeApi:
         else:
             _LOGGER.debug("Skipping bind process for reconnect")
 
-        if self._client.is_connected:
+        if self.is_connected:
             return True
 
         _LOGGER.debug("Connection is not active after connect attempt")
@@ -316,26 +422,51 @@ class FridgeApi:
 
     async def disconnect(self):
         """Disconnect from the fridge."""
-        if self._poll_task:
-            self._poll_task.cancel()
-        if self._client and self._client.is_connected:
-            await self._client.disconnect()
+        client, self._client = self._client, None
+        if client and client.is_connected:
+            await client.disconnect()
+
+    def _max_write_size(self) -> int:
+        """Return the largest payload the current connection accepts in one write."""
+        mtu = getattr(self._client, "mtu_size", None)
+        if not isinstance(mtu, int) or mtu < DEFAULT_MAX_WRITE_SIZE + 3:
+            # MTU not negotiated (yet) or smaller than the default: stay safe.
+            return DEFAULT_MAX_WRITE_SIZE
+        return mtu - 3
+
+    def _split_packet(self, packet: bytes) -> list[bytes]:
+        """Split a packet into chunks the adapter is willing to write."""
+        size = self._max_write_size()
+        if len(packet) <= size:
+            return [packet]
+        return [packet[i : i + size] for i in range(0, len(packet), size)]
 
     async def _send_raw(self, packet: bytes):
         """Send raw packet to fridge, adapting write method."""
-        if not self._client.is_connected:
-            _LOGGER.debug("Cannot send, not connected")
-            return
-        _LOGGER.debug("--> SENDING: %s", packet.hex())
-        await self._client.write_gatt_char(
-            FRIDGE_RW_CHARACTERISTIC_UUID,
-            packet,
-            response=self._write_requires_response,
-        )
+        async with self._lock:
+            if not self.is_connected:
+                _LOGGER.debug("Cannot send, not connected")
+                return
+            _LOGGER.debug("--> SENDING: %s", packet.hex())
+            chunks = self._split_packet(packet)
+            if len(chunks) > 1:
+                _LOGGER.debug(
+                    "Packet exceeds %s bytes, sending as %s chunks",
+                    self._max_write_size(),
+                    len(chunks),
+                )
+            for index, chunk in enumerate(chunks):
+                if index:
+                    await asyncio.sleep(WRITE_CHUNK_DELAY)
+                await self._client.write_gatt_char(
+                    FRIDGE_RW_CHARACTERISTIC_UUID,
+                    chunk,
+                    response=self._write_requires_response,
+                )
 
     async def update_status(self) -> bool:
         """Request status and wait for notification. Returns True on success, False on timeout."""
-        if not self._client.is_connected:
+        if not self.is_connected:
             _LOGGER.debug("Cannot update status, not connected")
             return False
 
@@ -356,7 +487,7 @@ class FridgeApi:
             self._last_successful_update_time = asyncio.get_running_loop().time()
         while True:
             try:
-                if not self._client.is_connected:
+                if not self.is_connected:
                     _LOGGER.debug("Device disconnected, attempting to reconnect")
                     if await self.connect(is_reconnect=True):
                         _LOGGER.debug("Successfully reconnected to device")
@@ -366,30 +497,32 @@ class FridgeApi:
                         )
                     else:
                         _LOGGER.debug("Reconnect failed. Will retry later")
-                if self._client.is_connected:
-                    if await self.update_status():
-                        self._last_successful_update_time = (
-                            asyncio.get_running_loop().time()
-                        )
-                        if not self.is_available:
-                            _LOGGER.debug("Device communication restored")
-                            self.is_available = True
+                if self.is_connected and await self.update_status():
+                    self._last_successful_update_time = (
+                        asyncio.get_running_loop().time()
+                    )
+                    if not self.is_available:
+                        _LOGGER.debug("Device communication restored")
+                        self.is_available = True
                 time_since_success = (
                     asyncio.get_running_loop().time()
                     - self._last_successful_update_time
                 )
-                if time_since_success > 300:  # 5 minutes
-                    if self.is_available:
-                        _LOGGER.debug(
-                            "Device has been unreachable for over 5 minutes. Marking as unavailable"
-                        )
-                        self.is_available = False
-                        self.status.clear()
+                if time_since_success > UNAVAILABLE_AFTER and self.is_available:
+                    _LOGGER.debug(
+                        "Device has been unreachable for over %s seconds. "
+                        "Marking as unavailable",
+                        UNAVAILABLE_AFTER,
+                    )
+                    self.is_available = False
+                    self.status.clear()
                 update_callback()
 
                 # --- Sleep ---
-                sleep_duration = 30 if self._client.is_connected else 60
-                await asyncio.sleep(sleep_duration)
+                if self.is_connected:
+                    await asyncio.sleep(POLL_INTERVAL)
+                else:
+                    await self._async_wait_for_advertisement()
 
             except asyncio.CancelledError:
                 _LOGGER.debug("Polling task cancelled")
@@ -398,4 +531,4 @@ class FridgeApi:
             except BleakError as e:
                 _LOGGER.debug("An unexpected BLE error occurred during polling: %s", e)
                 self.is_available = False
-                await asyncio.sleep(60)
+                await self._async_wait_for_advertisement()
