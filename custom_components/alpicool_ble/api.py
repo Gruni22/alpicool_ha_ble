@@ -90,7 +90,7 @@ class FridgeApi:
                 int(current_status.get("bat_saver", 0)),
                 to_unsigned_byte(current_status.get("left_target", 0)),
                 to_unsigned_byte(current_status.get("temp_max", 20)),
-                to_unsigned_byte(current_status.get("temp_min", -20)),
+                to_unsigned_byte(current_status.get("temp_min", -30)),
                 to_unsigned_byte(current_status.get("left_ret_diff", 1)),
                 int(current_status.get("start_delay", 0)),
                 int(current_status.get("unit", 0)),

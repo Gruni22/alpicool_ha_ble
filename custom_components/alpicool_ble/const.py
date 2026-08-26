@@ -31,9 +31,9 @@ UNIT_FAHRENHEIT = 1
 
 # Fallback target temperature range, used when the fridge does not report a
 # usable range of its own in "temp_min"/"temp_max".
-DEFAULT_MIN_TEMP_C = -20
+DEFAULT_MIN_TEMP_C = -30
 DEFAULT_MAX_TEMP_C = 20
-DEFAULT_MIN_TEMP_F = -4
+DEFAULT_MIN_TEMP_F = -22
 DEFAULT_MAX_TEMP_F = 68
 
 # --- Configuration Options ---

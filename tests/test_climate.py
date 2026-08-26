@@ -74,15 +74,15 @@ def test_limits_come_from_the_fridge() -> None:
 
 def test_limits_fall_back_per_unit() -> None:
     """Without a usable range the fallback matches the reported unit."""
-    assert (make_zone(unit=1).min_temp, make_zone(unit=1).max_temp) == (-4, 68)
-    assert (make_zone(unit=0).min_temp, make_zone(unit=0).max_temp) == (-20, 20)
+    assert (make_zone(unit=1).min_temp, make_zone(unit=1).max_temp) == (-22, 68)
+    assert (make_zone(unit=0).min_temp, make_zone(unit=0).max_temp) == (-30, 20)
 
 
 def test_implausible_limits_are_ignored() -> None:
     """A fridge that reports min >= max does not lock the slider up."""
     zone = make_zone(unit=0, temp_min=0, temp_max=0)
 
-    assert (zone.min_temp, zone.max_temp) == (-20, 20)
+    assert (zone.min_temp, zone.max_temp) == (-30, 20)
 
 
 def test_temperatures_are_passed_through_unconverted() -> None:
