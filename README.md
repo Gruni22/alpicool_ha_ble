@@ -27,7 +27,7 @@ This component was inspired by the prior work done by klightspeed's [BrassMonkey
 This integration supports !!!untested!!! **both single and dual-zone fridges**. 
 
 * For **dual-zone** models, it will create two `climate` entities (`... Left` and `... Right`), which will both become available.
-* For **single-zone** models, it will also create two `climate` entities, but the `... Right` entity will remain permanently `unavailable` as the fridge does not report data for it. You can disable or hide this second entity in Home Assistant.
+* For **single-zone** models, only one `climate` entity is created.
 
 ***
 ## Installation

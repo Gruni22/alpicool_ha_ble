@@ -10,7 +10,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .api import FridgeApi
+from .api import FridgeApi, has_right_zone
 from .const import (
     CONF_DUAL_ZONE_MODES,
     CONF_LEFT_NAME,
@@ -42,7 +42,7 @@ async def async_setup_entry(
 
     entities = [AlpicoolClimateZone(entry, api, "left")]
 
-    if "right_current" in api.status:
+    if has_right_zone(api.status):
         _LOGGER.debug("Dual-zone fridge detected, adding right zone entity")
         entities.append(AlpicoolClimateZone(entry, api, "right"))
 
@@ -77,7 +77,7 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
     @property
     def _is_dual_zone(self) -> bool:
         """Helper to check if this is a dual-zone model."""
-        return "right_current" in self.api.status
+        return has_right_zone(self.api.status)
 
     @property
     def temperature_unit(self) -> str:
