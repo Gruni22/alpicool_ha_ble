@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from bleak import BleakClient
+from bleak.exc import BleakError
+from bleak_retry_connector import establish_connection
 import voluptuous as vol
 
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
@@ -23,8 +27,46 @@ from .const import (
     DEFAULT_LEFT_NAME,
     DEFAULT_RIGHT_NAME,
     DOMAIN,
+    FRIDGE_NOTIFY_UUID,
+    FRIDGE_RW_CHARACTERISTIC_UUID,
 )
 from .entity import get_option
+
+_LOGGER = logging.getLogger(__name__)
+
+# Every Alpicool-protocol fridge offers the GATT service 0x1234 with these
+# characteristics, whatever it puts in its advertisement.
+FRIDGE_SERVICE_UUID = "00001234-0000-1000-8000-00805f9b34fb"
+
+
+async def async_has_fridge_service(
+    discovery_info: BluetoothServiceInfoBleak,
+) -> bool | None:
+    """Return whether a discovered device offers the fridge GATT service.
+
+    True/False when the device could be checked, None when it could not be
+    reached (e.g. the phone app is connected), so the caller can decide.
+    """
+    if FRIDGE_SERVICE_UUID in (u.lower() for u in discovery_info.service_uuids):
+        return True
+    try:
+        client = await establish_connection(
+            BleakClient,
+            discovery_info.device,
+            discovery_info.name or discovery_info.address,
+            max_attempts=1,
+        )
+    except (BleakError, TimeoutError) as err:
+        _LOGGER.debug("Could not check %s: %s", discovery_info.address, err)
+        return None
+    try:
+        return (
+            client.services.get_characteristic(FRIDGE_RW_CHARACTERISTIC_UUID)
+            is not None
+            and client.services.get_characteristic(FRIDGE_NOTIFY_UUID) is not None
+        )
+    finally:
+        await client.disconnect()
 
 
 def normalize_ble_address(addr: str) -> str | None:
@@ -56,6 +98,11 @@ class AlpicoolConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle discovery via Bluetooth."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
+
+        # The advertisement matchers are broad (0xFFF0 is used by many BLE
+        # modules), so only offer devices that really have the fridge service.
+        if await async_has_fridge_service(discovery_info) is False:
+            return self.async_abort(reason="not_supported")
 
         self._discovery_info = discovery_info
         self.context["title_placeholders"] = {"name": discovery_info.name}

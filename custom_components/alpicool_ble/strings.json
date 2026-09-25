@@ -21,7 +21,8 @@
       "invalid_address": "That is not a valid Bluetooth address. Use AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff or aabbccddeeff."
     },
     "abort": {
-      "already_configured": "This fridge is already configured."
+      "already_configured": "This fridge is already configured.",
+      "not_supported": "This device does not offer the fridge Bluetooth service."
     }
   },
   "options": {
