@@ -1,6 +1,6 @@
-# Alpicool, BrassMonkey, Ocean Comfort, ... 12V/24V BLE Fridge Integration for Home Assistant
+# Alpicool, BrassMonkey, Ocean Comfort, MAENTUM, ... 12V/24V BLE Fridge Integration for Home Assistant
 
-This is a Home Assistant Custom Component to control Alpicool, BrassMonkey, Ocean Comfort, or other compatible portable fridges via Bluetooth Low Energy (BLE).
+This is a Home Assistant Custom Component to control Alpicool, BrassMonkey, Ocean Comfort, MAENTUM or other compatible portable fridges via Bluetooth Low Energy (BLE).
 
 This integration creates multiple entities in Home Assistant, allowing you to monitor and control all known aspects of your fridge.
 
@@ -28,6 +28,24 @@ This integration supports !!!untested!!! **both single and dual-zone fridges**.
 
 * For **dual-zone** models, it will create two `climate` entities (`... Left` and `... Right`), which will both become available.
 * For **single-zone** models, only one `climate` entity is created.
+
+***
+## MAENTUM cooler boxes (Plug-in Festivals GmbH)
+
+MAENTUM compressor cooler boxes speak the same protocol.
+
+| Model | Status |
+|---|---|
+| ICECUBE X 50 | Tested on 2026-09-25: advertises service `0x1234` (used for discovery) under the name `A1-…`; status and target temperature confirmed, settings are read correctly. Single zone. |
+| Other MAENTUM / Plug-in Festivals boxes | Reported by users to use the same protocol, not tested here. Check your box with the probe script in [docs/maentum](docs/maentum/README.md). |
+
+Notes:
+
+* The box needs a Bluetooth receiver in range that can **connect**: a local adapter or an ESPHome Bluetooth proxy with `active: true`. Receivers that only listen, such as Shelly devices, are not enough.
+* Close the MAENTUM app first; the box accepts only one connection at a time.
+* The box answers without the "Bind" step, so the "Pair on start-up (Bind)" option can be switched off.
+
+A guide (probe script, research notes, HACS vs. ESPHome comparison) is in [docs/maentum](docs/maentum/README.md).
 
 ***
 ## Installation
