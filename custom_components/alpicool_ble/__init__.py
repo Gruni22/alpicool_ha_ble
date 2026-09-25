@@ -9,7 +9,8 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import FridgeApi
-from .const import DOMAIN
+from .const import CONF_BIND_ON_START, DEFAULT_BIND_ON_START, DOMAIN
+from .entity import get_option
 
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
@@ -34,7 +35,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     try:
-        if not await api.connect():
+        if not await api.connect(
+            bind=get_option(entry, CONF_BIND_ON_START, DEFAULT_BIND_ON_START)
+        ):
             raise ConfigEntryNotReady(
                 f"Could not connect to Alpicool device at {address}"
             )

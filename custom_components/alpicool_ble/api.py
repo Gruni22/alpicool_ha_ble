@@ -344,7 +344,7 @@ class FridgeApi:
             return False
         return True
 
-    async def connect(self, is_reconnect: bool = False) -> bool:
+    async def connect(self, is_reconnect: bool = False, bind: bool = True) -> bool:
         """Connect to the fridge and try to bind, with a fallback."""
         _LOGGER.debug("Attempting to connect")
         if self.is_connected:
@@ -399,7 +399,7 @@ class FridgeApi:
             _LOGGER.error("Failed to set up the BLE connection: %s", e)
             await self.disconnect()
             return False
-        if not is_reconnect:
+        if not is_reconnect and bind:
             _LOGGER.debug("Base BLE connection successful. Attempting to bind")
             try:
                 self._bind_event.clear()
@@ -417,7 +417,7 @@ class FridgeApi:
                     "An error occurred during bind, proceeding without it: %s", e
                 )
         else:
-            _LOGGER.debug("Skipping bind process for reconnect")
+            _LOGGER.debug("Skipping bind (reconnect or disabled in options)")
 
         if self.is_connected:
             return True

@@ -38,6 +38,10 @@ DEFAULT_MAX_TEMP_F = 68
 
 # --- Configuration Options ---
 CONF_DUAL_ZONE_MODES = "dual_zone_modes"
+# Send Bind (fridge shows "APP", waits up to 20 s for the button) on start-up.
+# On by default, as before; the protocol does not require it for every model.
+CONF_BIND_ON_START = "bind_on_start"
+DEFAULT_BIND_ON_START = True
 CONF_LEFT_NAME = "left_name"
 CONF_RIGHT_NAME = "right_name"
 
