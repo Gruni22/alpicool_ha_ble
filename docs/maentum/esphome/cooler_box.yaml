@@ -1,0 +1,72 @@
+# Example: MAENTUM / Plug In Festivals cooler box connected to Home Assistant via an ESP32.
+#
+# Uses the external component neftaly/esphome-alpicool. As of 2026-09-25:
+# - The repository has NO license file. Including it via external_components
+#   only downloads the code on your device; we do not distribute it.
+# - According to its README tested on an Alpicool CX40, according to smarthomeundmore.de
+#   also on an older Plug In Festivals box. Nothing is confirmed on an IceCubeX.
+# - The keys below are taken from the component's README. Not tested by us.
+#
+# Important: While the ESP32 is connected, neither the phone app nor
+# Home Assistant can connect directly to the box (the box allows only one client).
+
+esphome:
+  name: cooler-box
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+api:
+  encryption:
+    key: !secret api_encryption_key
+ota:
+  - platform: esphome
+    password: !secret ota_password
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+external_components:
+  - source: github://neftaly/esphome-alpicool
+
+esp32_ble_tracker:
+
+ble_client:
+  - mac_address: "XX:XX:XX:XX:XX:XX" # MAC of the box, e.g. from nRF Connect
+    id: alpicool
+
+alpicool_ble:
+  ble_client_id: alpicool
+  id: fridge
+
+climate:
+  - platform: alpicool_ble
+    name: "Cooler box"
+
+sensor:
+  - platform: alpicool_ble
+    current_temperature:
+      name: "Cooler box temperature"
+    target_temperature:
+      name: "Cooler box target temperature"
+    battery_percent:
+      name: "Cooler box battery"
+    battery_voltage:
+      name: "Cooler box voltage"
+
+switch:
+  - platform: alpicool_ble
+    power:
+      name: "Cooler box power"
+    controls_lock:
+      name: "Cooler box button lock"
+
+select:
+  - platform: alpicool_ble
+    run_mode:
+      name: "Cooler box mode"
+    battery_saver:
+      name: "Cooler box battery protection"
