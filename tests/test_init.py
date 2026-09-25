@@ -161,7 +161,7 @@ async def test_setup_creates_the_zone(
 
     assert entry.state is ConfigEntryState.LOADED
 
-    state = hass.states.get("climate.fridge_left")
+    state = hass.states.get("climate.fridge")
     assert state is not None
     assert state.attributes["current_temperature"] == -3
     assert state.attributes["temperature"] == -5
@@ -184,7 +184,7 @@ async def test_fahrenheit_fridge_is_not_read_as_celsius(
     """Issue #15/#18/#21: a chilled fridge must not show up as 34 degrees C."""
     await setup_entry(hass, FakeFridge(unit=1, current=34, target=38))
 
-    state = hass.states.get("climate.fridge_left")
+    state = hass.states.get("climate.fridge")
     # Home Assistant is metric here, so 34 F is converted for display.
     assert state.attributes["current_temperature"] == pytest.approx(1.1, abs=0.1)
     assert state.attributes["temperature"] == pytest.approx(3.3, abs=0.1)
@@ -197,7 +197,7 @@ async def test_fahrenheit_fridge_keeps_its_numbers_in_an_imperial_setup(
     hass.config.units = US_CUSTOMARY_SYSTEM
     await setup_entry(hass, FakeFridge(unit=1, current=34, target=38))
 
-    state = hass.states.get("climate.fridge_left")
+    state = hass.states.get("climate.fridge")
     assert state.attributes["current_temperature"] == 34
     assert state.attributes["temperature"] == 38
 
@@ -208,7 +208,7 @@ async def test_celsius_fridge_is_unaffected(
     """The existing Celsius behaviour is unchanged."""
     await setup_entry(hass, fake_fridge)
 
-    state = hass.states.get("climate.fridge_left")
+    state = hass.states.get("climate.fridge")
     assert state.attributes["current_temperature"] == -3
     assert state.attributes["min_temp"] == -20
     assert state.attributes["max_temp"] == 20
@@ -251,12 +251,12 @@ async def test_setting_a_temperature_reaches_the_fridge(
     await hass.services.async_call(
         "climate",
         "set_temperature",
-        {"entity_id": "climate.fridge_left", "temperature": -12},
+        {"entity_id": "climate.fridge", "temperature": -12},
         blocking=True,
     )
     await hass.async_block_till_done()
 
-    assert hass.states.get("climate.fridge_left").attributes["temperature"] == -12
+    assert hass.states.get("climate.fridge").attributes["temperature"] == -12
 
 
 async def test_locking_refreshes_immediately_instead_of_waiting_for_a_poll(
@@ -392,4 +392,41 @@ async def test_unload_disconnects(
     await hass.async_block_till_done()
 
     assert fake_fridge.is_connected is False
-    assert hass.states.get("climate.fridge_left").state == "unavailable"
+    assert hass.states.get("climate.fridge").state == "unavailable"
+
+
+async def test_existing_single_zone_keeps_its_entity_id(
+    hass: HomeAssistant, enable_bluetooth: None, fake_fridge: FakeFridge
+) -> None:
+    """Renaming the only zone to the device name must not break automations."""
+    from homeassistant.helpers import entity_registry as er
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=ADDRESS,
+        data={CONF_ADDRESS: ADDRESS, CONF_NAME: "Fridge"},
+    )
+    entry.add_to_hass(hass)
+    er.async_get(hass).async_get_or_create(
+        "climate",
+        DOMAIN,
+        f"{ADDRESS}_left",
+        suggested_object_id="fridge_left",
+        config_entry=entry,
+    )
+
+    with (
+        patch.object(
+            api_module.bluetooth,
+            "async_ble_device_from_address",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            api_module, "establish_connection", AsyncMock(return_value=fake_fridge)
+        ),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert hass.states.get("climate.fridge_left") is not None
+    assert hass.states.get("climate.fridge") is None
