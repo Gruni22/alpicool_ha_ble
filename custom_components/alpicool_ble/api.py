@@ -120,7 +120,7 @@ class FridgeApi:
             ]
         )
 
-        if "right_current" in current_status:
+        if has_right_zone(current_status):
             right_zone_data = bytearray(
                 [
                     to_unsigned_byte(current_status.get("right_target", 0)),

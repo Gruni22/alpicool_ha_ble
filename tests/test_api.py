@@ -55,6 +55,12 @@ DUAL_ZONE_PAYLOAD = SINGLE_ZONE_PAYLOAD + bytes(
     ]
 )
 
+# A single zone fridge (e.g. a MAENTUM IceCubeX) that still reports a long
+# status frame, with 0x80 (-128) marking the absent second zone.
+SINGLE_ZONE_LONG_PAYLOAD = SINGLE_ZONE_PAYLOAD + bytes(
+    [0, 0, 0, 0, 0, 0, 0, 0, 0x80, 0]
+)
+
 
 class FakeClient:
     """Minimal stand-in for a connected BleakClient."""
@@ -254,6 +260,22 @@ async def test_set_values_is_chunked_for_dual_zone_fridges(
     assert int.from_bytes(rebuilt[-2:], "big") == sum(rebuilt[:-2]) & 0xFFFF
     # powered_on is the second payload byte after header, length and command.
     assert rebuilt[5] == 0
+
+
+async def test_set_values_is_not_chunked_for_a_single_zone_fridge_with_a_long_status(
+    fridge: FridgeApi,
+) -> None:
+    """A single-zone fridge reporting the sentinel right_current must not get
+    a bogus dual-zone SET payload, which would need chunking it never should."""
+    fridge._decode_status(SINGLE_ZONE_LONG_PAYLOAD)
+    fridge._client = FakeClient(mtu_size=23)
+
+    await fridge.async_set_values({"powered_on": False})
+
+    assert len(fridge._client.writes) == 1
+    packet = fridge._client.writes[0]
+    assert len(packet) == 20
+    assert int.from_bytes(packet[-2:], "big") == sum(packet[:-2]) & 0xFFFF
 
 
 async def test_send_raw_is_serialised(fridge: FridgeApi) -> None:
