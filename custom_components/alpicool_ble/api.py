@@ -34,6 +34,16 @@ def _to_signed_byte(b: int) -> int:
     return b - 256 if b > 127 else b
 
 
+# Payload sizes of a SET echo (14/25 data bytes, with or without the two
+# checksum bytes). A SET answer carrying a status is 18/28 bytes or longer.
+_SET_ECHO_SIZES = (14, 16, 25, 27)
+
+
+def _is_set_status(payload: bytes) -> bool:
+    """Return True if a SET notification carries a full status, not an echo."""
+    return len(payload) >= 18 and len(payload) not in _SET_ECHO_SIZES
+
+
 class FridgeApi:
     """A class to interact with the fridge."""
 
@@ -268,6 +278,10 @@ class FridgeApi:
                 self._status_updated_event.set()
             elif cmd == Request.BIND:
                 self._bind_event.set()
+            elif cmd == Request.SET and _is_set_status(payload):
+                # The fridge answers SET with its full new status.
+                self._decode_status(payload)
+                self._status_updated_event.set()
             elif cmd in [Request.SET_LEFT, Request.SET_RIGHT, Request.SET]:
                 _LOGGER.debug("Ignoring echo for SET command")
             else:
