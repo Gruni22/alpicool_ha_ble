@@ -96,10 +96,25 @@ def test_temperatures_are_passed_through_unconverted() -> None:
 # --- Zone naming (issue #21) ----------------------------------------------
 
 
+DUAL = {"right_current": -18}
+
+
 def test_zones_are_named_left_and_right_by_default() -> None:
-    """Default names are unchanged."""
-    assert make_zone("left").name == "Left"
-    assert make_zone("right").name == "Right"
+    """Dual zone fridges keep their default names."""
+    assert make_zone("left", **DUAL).name == "Left"
+    assert make_zone("right", **DUAL).name == "Right"
+
+
+def test_single_zone_takes_the_device_name() -> None:
+    """The only zone is the fridge itself, so it has no name of its own."""
+    assert make_zone("left").name is None
+
+
+def test_single_zone_keeps_a_custom_name() -> None:
+    """A name the user entered is kept on a single zone fridge."""
+    entry = make_entry(**{CONF_LEFT_NAME: "Fridge"})
+
+    assert make_zone("left", entry).name == "Fridge"
 
 
 def test_zone_names_can_be_overridden() -> None:
@@ -114,7 +129,7 @@ def test_blank_zone_name_falls_back_to_the_default() -> None:
     """An empty text field does not produce a nameless entity."""
     entry = make_entry(**{CONF_LEFT_NAME: ""})
 
-    assert make_zone("left", entry).name == "Left"
+    assert make_zone("left", entry, **DUAL).name == "Left"
 
 
 def test_unique_ids_are_stable_across_renames() -> None:

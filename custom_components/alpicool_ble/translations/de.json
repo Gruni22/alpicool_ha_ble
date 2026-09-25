@@ -36,7 +36,7 @@
         },
         "data_description": {
           "dual_zone_modes": "Nur aktivieren, wenn deine Zwei-Zonen-Kühlbox zwischen einem kombinierten Kühlmodus und einem Gefriermodus umschaltet. Die Option steuert nicht, ob eine zweite Zone angelegt wird – das wird automatisch erkannt.",
-          "left_name": "Zum Beispiel Links, Oben oder Kühlfach.",
+          "left_name": "Zum Beispiel Links, Oben oder Kühlfach. Bei Ein-Zonen-Boxen bedeutet \"Left\": Gerätename verwenden.",
           "right_name": "Zum Beispiel Rechts, Unten oder Gefrierfach. Wird nur bei Zwei-Zonen-Modellen verwendet."
         }
       }

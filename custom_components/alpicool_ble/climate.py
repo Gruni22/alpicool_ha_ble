@@ -72,7 +72,11 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         )
 
         self._attr_unique_id = f"{self._address}_{self._zone}"
-        self._attr_name = get_option(entry, name_key, default_name) or default_name
+        name = get_option(entry, name_key, default_name) or default_name
+        if not has_right_zone(api.status) and name == DEFAULT_LEFT_NAME:
+            # The only zone is the fridge itself, so it takes the device name.
+            name = None
+        self._attr_name = name
 
     @property
     def _is_dual_zone(self) -> bool:
