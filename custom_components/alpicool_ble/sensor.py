@@ -29,6 +29,8 @@ SENSORS = {
         "name": "Battery Voltage",
         "unit": UnitOfElectricPotential.VOLT,
         "device_class": SensorDeviceClass.VOLTAGE,
+        # The fridge reports tenths of a volt.
+        "display_precision": 1,
         "state_class": SensorStateClass.MEASUREMENT,
         "entity_category": EntityCategory.DIAGNOSTIC,
         "value_fn": lambda status: float(
@@ -70,6 +72,9 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
         self._attr_native_unit_of_measurement = self._sensor_def.get("unit")
         self._attr_state_class = self._sensor_def.get("state_class")
         self._attr_entity_category = self._sensor_def.get("entity_category")
+        self._attr_suggested_display_precision = self._sensor_def.get(
+            "display_precision"
+        )
 
     @property
     def native_value(self) -> float | None:
