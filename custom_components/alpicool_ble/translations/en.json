@@ -8,12 +8,14 @@
         "data": {
           "address": "Bluetooth address",
           "name": "Name",
-          "dual_zone_modes": "Fridge/Freezer mode instead of Max/Eco"
+          "dual_zone_modes": "Fridge/Freezer mode instead of Max/Eco",
+          "bind_on_start": "Pair on start-up (Bind)"
         },
         "data_description": {
           "address": "Accepted as AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff or aabbccddeeff.",
           "name": "Shown as the device name in Home Assistant.",
-          "dual_zone_modes": "Leave this off unless your dual zone fridge switches between a combined Fridge mode and a Freezer mode. It does not control whether a second zone is created — that is detected automatically. With this on, the second zone is only available while the fridge is in Freezer mode."
+          "dual_zone_modes": "Leave this off unless your dual zone fridge switches between a combined Fridge mode and a Freezer mode. It does not control whether a second zone is created — that is detected automatically. With this on, the second zone is only available while the fridge is in Freezer mode.",
+          "bind_on_start": "On every start of Home Assistant the fridge shows \"APP\" and Home Assistant waits up to 5 s for its button. According to the protocol notes (BrassMonkeyFridgeMonitor) pairing is not required; turn it off if your fridge answers without it."
         }
       }
     },
@@ -32,9 +34,11 @@
         "data": {
           "dual_zone_modes": "Fridge/Freezer mode instead of Max/Eco",
           "left_name": "Name of the first zone",
-          "right_name": "Name of the second zone"
+          "right_name": "Name of the second zone",
+          "bind_on_start": "Pair on start-up (Bind)"
         },
         "data_description": {
+          "bind_on_start": "On every start of Home Assistant the fridge shows \"APP\" and Home Assistant waits up to 5 s for its button. According to the protocol notes (BrassMonkeyFridgeMonitor) pairing is not required; turn it off if your fridge answers without it.",
           "dual_zone_modes": "Leave this off unless your dual zone fridge switches between a combined Fridge mode and a Freezer mode. It does not control whether a second zone is created — that is detected automatically.",
           "left_name": "For example Left, Top or Fridge.",
           "right_name": "For example Right, Bottom or Freezer. Only used on dual zone models."
