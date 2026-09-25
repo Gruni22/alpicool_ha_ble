@@ -437,6 +437,37 @@ async def test_connect_picks_write_with_response_when_needed(
     assert fridge._write_requires_response is True
 
 
+async def test_connect_prefers_write_with_response_when_both_offered(
+    fridge: FridgeApi,
+) -> None:
+    """Some fridges silently drop unacknowledged writes for larger commands
+    (e.g. SET) even though they also advertise write-without-response, so an
+    acknowledged write must be preferred whenever it's available."""
+    client = MagicMock()
+    client.is_connected = True
+    client.start_notify = AsyncMock()
+    char = MagicMock()
+    char.uuid = FRIDGE_RW_CHARACTERISTIC_UUID
+    char.properties = ["write", "write-without-response"]
+    service = MagicMock()
+    service.characteristics = [char]
+    client.services = [service]
+
+    with (
+        patch.object(
+            api_module.bluetooth,
+            "async_ble_device_from_address",
+            return_value=MagicMock(),
+        ),
+        patch.object(
+            api_module, "establish_connection", AsyncMock(return_value=client)
+        ),
+    ):
+        assert await fridge.connect(is_reconnect=True) is True
+
+    assert fridge._write_requires_response is True
+
+
 async def test_advertisement_wakes_the_reconnect_wait(
     fridge: FridgeApi, monkeypatch: pytest.MonkeyPatch
 ) -> None:

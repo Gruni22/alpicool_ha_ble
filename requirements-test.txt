@@ -6,3 +6,4 @@ bleak-retry-connector
 # pulled in by homeassistant.components.bluetooth on import
 aiousbwatcher
 pyserial
+serialx
