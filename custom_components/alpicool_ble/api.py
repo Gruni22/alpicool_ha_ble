@@ -28,6 +28,15 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Value the fridge reports as the temperature of a zone it does not have. A
+# MAENTUM IceCubeX (single zone) sends a 42 byte status with 0x80 there.
+_NO_ZONE_TEMPERATURE = -128
+
+
+def has_right_zone(status: dict) -> bool:
+    """Return True if the fridge reported a real second zone."""
+    return status.get("right_current", _NO_ZONE_TEMPERATURE) != _NO_ZONE_TEMPERATURE
+
 
 def _to_signed_byte(b: int) -> int:
     """Convert an unsigned byte (0-255) to a signed byte (-128-127)."""
