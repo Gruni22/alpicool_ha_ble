@@ -416,6 +416,9 @@ class FridgeApi:
                 await self.disconnect()
                 return False
 
+            _LOGGER.debug(
+                "Write characteristic properties: %s", write_char.properties
+            )
             if "write" in write_char.properties:
                 # Some fridges silently drop larger unacknowledged writes (e.g.
                 # the multi-byte SET command for mode/preset/battery-saver)
@@ -497,7 +500,11 @@ class FridgeApi:
             if not self.is_connected:
                 _LOGGER.debug("Cannot send, not connected")
                 return
-            _LOGGER.debug("--> SENDING: %s", packet.hex())
+            _LOGGER.debug(
+                "--> SENDING (response=%s): %s",
+                self._write_requires_response,
+                packet.hex(),
+            )
             chunks = self._split_packet(packet)
             if len(chunks) > 1:
                 _LOGGER.debug(
