@@ -1,9 +1,10 @@
 """Models for the Alpicool BLE integration."""
 
+import asyncio
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -44,3 +45,14 @@ class AlpicoolEntity(Entity):
                 self.hass, f"{DOMAIN}_{self._address}_update", self.async_write_ha_state
             )
         )
+
+    async def _async_refresh_after_write(self) -> None:
+        """Poll fresh state after sending a command and push it to entities.
+
+        Without this the UI keeps showing the pre-write value until the next
+        poll cycle, since a BLE write doesn't update Home Assistant's state
+        on its own.
+        """
+        await asyncio.sleep(0.5)
+        if await self.api.update_status():
+            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")

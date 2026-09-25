@@ -65,7 +65,7 @@ class AlpicoolSensor(AlpicoolEntity, SensorEntity):
         self._sensor_def = sensor_def
 
         self._attr_unique_id = f"{self._address}_{self._sensor_key}"
-        self._attr_name = f"{entry.data['name']} {self._sensor_def['name']}"
+        self._attr_name = self._sensor_def["name"]
         self._attr_device_class = self._sensor_def.get("device_class")
         self._attr_native_unit_of_measurement = self._sensor_def.get("unit")
         self._attr_state_class = self._sensor_def.get("state_class")

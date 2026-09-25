@@ -33,7 +33,7 @@ class AlpicoolLockSwitch(AlpicoolEntity, SwitchEntity):
         """Initialize the switch."""
         super().__init__(entry, api)
         self._attr_unique_id = f"{self._address}_lock"
-        self._attr_name = f"{entry.data['name']} Lock"
+        self._attr_name = "Lock"
 
     @property
     def is_on(self) -> bool | None:
@@ -45,7 +45,9 @@ class AlpicoolLockSwitch(AlpicoolEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the lock on."""
         await self.api.async_set_values({"locked": True})
+        await self._async_refresh_after_write()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the lock off."""
         await self.api.async_set_values({"locked": False})
+        await self._async_refresh_after_write()

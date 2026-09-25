@@ -259,6 +259,26 @@ async def test_setting_a_temperature_reaches_the_fridge(
     assert hass.states.get("climate.fridge_left").attributes["temperature"] == -12
 
 
+async def test_locking_refreshes_immediately_instead_of_waiting_for_a_poll(
+    hass: HomeAssistant, enable_bluetooth: None, fake_fridge: FakeFridge
+) -> None:
+    """The lock switch (and number/select entities on the same code path)
+    must not show the pre-write value until the next 30s poll."""
+    await setup_entry(hass, fake_fridge)
+    assert hass.states.get("switch.fridge_lock").state == "off"
+
+    await hass.services.async_call(
+        "switch",
+        "turn_on",
+        {"entity_id": "switch.fridge_lock"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert fake_fridge.state[0] == 1
+    assert hass.states.get("switch.fridge_lock").state == "on"
+
+
 async def test_setup_registers_an_advertisement_callback(
     hass: HomeAssistant, enable_bluetooth: None, fake_fridge: FakeFridge
 ) -> None:

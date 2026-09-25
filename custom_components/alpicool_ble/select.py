@@ -64,3 +64,4 @@ class AlpicoolBatterySaverSelect(AlpicoolEntity, SelectEntity):
         bat_saver_value = BATTERY_SAVER_MAP.get(option)
 
         await self.api.async_set_values({"bat_saver": bat_saver_value})
+        await self._async_refresh_after_write()

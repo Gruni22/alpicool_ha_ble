@@ -127,6 +127,16 @@ def test_decode_single_zone_status(fridge: FridgeApi) -> None:
     assert "right_current" not in fridge.status
 
 
+def test_decode_treats_0x7f_battery_percent_as_unknown(fridge: FridgeApi) -> None:
+    """0x7F means the fridge has no battery sensor, not a 127% reading."""
+    payload = bytearray(SINGLE_ZONE_PAYLOAD)
+    payload[15] = 0x7F
+
+    fridge._decode_status(bytes(payload))
+
+    assert fridge.status["bat_percent"] is None
+
+
 def test_decode_dual_zone_status(fridge: FridgeApi) -> None:
     """The second zone is decoded when the payload is long enough."""
     fridge._decode_status(DUAL_ZONE_PAYLOAD)

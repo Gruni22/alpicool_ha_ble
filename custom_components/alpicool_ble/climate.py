@@ -1,6 +1,5 @@
 """Climate platform for the Alpicool BLE integration."""
 
-import asyncio
 import logging
 from typing import Any
 
@@ -9,7 +8,6 @@ from homeassistant.components.climate.const import ClimateEntityFeature, HVACMod
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .api import FridgeApi
@@ -168,26 +166,18 @@ class AlpicoolClimateZone(AlpicoolEntity, ClimateEntity):
         """Set new target hvac mode."""
         is_on = hvac_mode == HVACMode.COOL
         await self.api.async_set_values({"powered_on": is_on})
-
-        await asyncio.sleep(0.5)
-        if await self.api.update_status():
-            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+        await self._async_refresh_after_write()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for this zone."""
         if ATTR_TEMPERATURE in kwargs:
             temp = int(kwargs[ATTR_TEMPERATURE])
             await self.api.async_set_temperature(self._zone, temp)
-
-            await asyncio.sleep(0.5)
-            if await self.api.update_status():
-                async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+            await self._async_refresh_after_write()
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         is_mode_1 = preset_mode in [PRESET_ECO, PRESET_FREEZER]
         run_mode_value = 1 if is_mode_1 else 0
         await self.api.async_set_values({"run_mode": run_mode_value})
-        await asyncio.sleep(0.5)
-        if await self.api.update_status():
-            async_dispatcher_send(self.hass, f"{DOMAIN}_{self._address}_update")
+        await self._async_refresh_after_write()

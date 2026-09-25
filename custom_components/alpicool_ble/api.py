@@ -183,7 +183,8 @@ class FridgeApi:
                 "left_tc_cold": _to_signed_byte(payload[12]),
                 "left_tc_halt": _to_signed_byte(payload[13]),
                 "left_current": _to_signed_byte(payload[14]),
-                "bat_percent": payload[15],
+                # 0x7F means the fridge has no battery sensor reading, not 127%.
+                "bat_percent": payload[15] if payload[15] != 0x7F else None,
                 "bat_vol_int": payload[16],
                 "bat_vol_dec": payload[17],
             }
@@ -405,7 +406,7 @@ class FridgeApi:
                 bind_packet = self._build_packet(Request.BIND, b"\x01")
                 await self._send_raw(bind_packet)
 
-                await asyncio.wait_for(self._bind_event.wait(), timeout=20)
+                await asyncio.wait_for(self._bind_event.wait(), timeout=5)
                 _LOGGER.debug("Bind successful")
             except TimeoutError:
                 _LOGGER.debug(

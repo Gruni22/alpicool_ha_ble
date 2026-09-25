@@ -60,7 +60,7 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
         self._number_def = number_def
 
         self._attr_unique_id = f"{self._address}_{self._number_key}"
-        self._attr_name = f"{entry.data['name']} {self._number_def['name']}"
+        self._attr_name = self._number_def["name"]
         self._attr_native_min_value = self._number_def["min"]
         self._attr_native_max_value = self._number_def["max"]
         self._attr_native_step = self._number_def["step"]
@@ -85,3 +85,4 @@ class AlpicoolNumber(AlpicoolEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         await self.api.async_set_values({self._number_key: int(value)})
+        await self._async_refresh_after_write()
