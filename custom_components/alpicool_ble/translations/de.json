@@ -21,7 +21,8 @@
       "invalid_address": "Das ist keine gültige Bluetooth-Adresse. Nutze AA:BB:CC:DD:EE:FF, aa-bb-cc-dd-ee-ff oder aabbccddeeff."
     },
     "abort": {
-      "already_configured": "Diese Kühlbox ist bereits eingerichtet."
+      "already_configured": "Diese Kühlbox ist bereits eingerichtet.",
+      "not_supported": "Dieses Gerät bietet den Bluetooth-Dienst der Kühlbox nicht an."
     }
   },
   "options": {
