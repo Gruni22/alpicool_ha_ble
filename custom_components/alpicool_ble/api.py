@@ -370,13 +370,17 @@ class FridgeApi:
                 await self.disconnect()
                 return False
 
-            if "write-without-response" in write_char.properties:
-                self._write_requires_response = False
-                _LOGGER.debug("Using 'write-without-response' for commands")
-            elif "write" in write_char.properties:
+            if "write" in write_char.properties:
+                # Some fridges silently drop larger unacknowledged writes (e.g.
+                # the multi-byte SET command for mode/preset/battery-saver)
+                # even though write-without-response is also advertised, so
+                # prefer an acknowledged write whenever it's available.
                 self._write_requires_response = True
+                _LOGGER.debug("Using 'write' (with response) for commands")
+            elif "write-without-response" in write_char.properties:
+                self._write_requires_response = False
                 _LOGGER.debug(
-                    "Device requires response for writes. Using 'write' for commands"
+                    "Characteristic only supports 'write-without-response'; using it for commands"
                 )
             else:
                 _LOGGER.error(
