@@ -34,6 +34,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(api.async_register_advertisement_callback())
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
+    if (reason := api.async_reachability()) is not None:
+        raise ConfigEntryNotReady(reason)
+
     try:
         if not await api.connect(
             bind=get_option(entry, CONF_BIND_ON_START, DEFAULT_BIND_ON_START)

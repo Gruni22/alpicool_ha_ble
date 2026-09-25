@@ -304,6 +304,28 @@ class FridgeApi:
         )
 
     @callback
+    def async_reachability(self) -> str | None:
+        """Explain why the fridge cannot be connected to, or None if it can.
+
+        Passive receivers such as Shelly devices hear the fridge but cannot
+        open a connection to it.
+        """
+        if self._async_ble_device() is not None:
+            return None
+        if bluetooth.async_ble_device_from_address(
+            self._hass, self._address, connectable=False
+        ):
+            return (
+                f"{self._address} is only received by Bluetooth receivers that "
+                "cannot connect (for example Shelly devices). Add a local "
+                "Bluetooth adapter or an ESPHome Bluetooth proxy near the fridge"
+            )
+        return (
+            f"No Bluetooth adapter or proxy has received {self._address}. "
+            "Check the address and that the fridge is in range"
+        )
+
+    @callback
     def _async_on_disconnect(self, client: BleakClient) -> None:
         """Handle the fridge or the proxy dropping the connection."""
         _LOGGER.debug("Disconnected from %s", self._address)
