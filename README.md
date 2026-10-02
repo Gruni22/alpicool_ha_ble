@@ -48,6 +48,17 @@ Notes:
 A guide (probe script, research notes, HACS vs. ESPHome comparison) is in [docs/maentum](docs/maentum/README.md).
 
 ***
+## Brevia cooler boxes
+
+| Model | Status |
+|---|---|
+| 24240 | Tested on 2026-10-02: advertises service `0xAF30` under the name `A1-…` (used for discovery). The GATT table holds the Alpicool service `0x1234` **twice**, with `0x1235`/`0x1236` in both; the integration uses the first writable/notifying pair. Status is read correctly (single zone). |
+
+Notes:
+
+* The box is dual-mode: it is also visible as a classic Bluetooth device (Serial Port, name `A1-`). If something on the host runs classic discovery (e.g. an open Bluetooth settings panel), BlueZ may try to connect over BR/EDR and fail with `org.bluez.Error.BREDR.ProfileUnavailable`. An LE-only scanner such as Home Assistant or an ESPHome Bluetooth proxy avoids that.
+
+***
 ## Installation
 
 Easiest install is via [HACS](https://hacs.xyz/):

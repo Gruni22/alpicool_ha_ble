@@ -5,6 +5,7 @@ from collections.abc import Callable
 import logging
 
 from bleak import BleakClient
+from bleak.backends.characteristic import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from bleak_retry_connector import establish_connection
@@ -38,6 +39,37 @@ def has_right_zone(status: dict) -> bool:
     return status.get("right_current", _NO_ZONE_TEMPERATURE) != _NO_ZONE_TEMPERATURE
 
 
+def _describe_services(services) -> str:
+    """Return a compact description of a GATT layout for log messages."""
+    parts = []
+    for service in services:
+        chars = ", ".join(
+            f"{char.uuid} [{'/'.join(char.properties)}]"
+            for char in service.characteristics
+        )
+        parts.append(f"{service.uuid}: {chars or '-'}")
+    return "; ".join(parts) or "none"
+
+
+def _find_characteristic(
+    services, uuid: str, properties: tuple[str, ...]
+) -> BleakGATTCharacteristic | None:
+    """Return the first characteristic with this UUID and one of the properties.
+
+    A characteristic with the UUID but none of the properties (e.g. a second
+    read-only 0x1236) is only returned if there is no better match.
+    """
+    fallback = None
+    for service in services:
+        for char in service.characteristics:
+            if char.uuid.lower() != uuid.lower():
+                continue
+            if any(prop in char.properties for prop in properties):
+                return char
+            fallback = fallback or char
+    return fallback
+
+
 def _to_signed_byte(b: int) -> int:
     """Convert an unsigned byte (0-255) to a signed byte (-128-127)."""
     return b - 256 if b > 127 else b
@@ -69,6 +101,10 @@ class FridgeApi:
         # BLEDevice that Home Assistant has just seen. Holding on to one across
         # reconnects is what kept the fridge unreachable until a reload.
         self._client: BleakClient | None = None
+        # Characteristics found on the current connection. Used instead of
+        # UUIDs because some fridges list the same UUID in two services.
+        self._write_char: BleakGATTCharacteristic | None = None
+        self._notify_char: BleakGATTCharacteristic | None = None
         self._write_requires_response = False
         # Buffer for reassembling fragmented packets
         self._notification_buffer = bytearray()
@@ -400,18 +436,25 @@ class FridgeApi:
 
         try:
             _LOGGER.debug("Discovering services and characteristics")
-            write_char = None
-            for service in self._client.services:
-                for char in service.characteristics:
-                    if char.uuid.lower() == FRIDGE_RW_CHARACTERISTIC_UUID.lower():
-                        write_char = char
-                        break
-                if write_char:
-                    break
+            write_char = _find_characteristic(
+                self._client.services,
+                FRIDGE_RW_CHARACTERISTIC_UUID,
+                ("write", "write-without-response"),
+            )
+            # Some fridges (e.g. Brevia 24240) expose the 0x1234 service twice,
+            # so the same UUID exists more than once and bleak refuses to look
+            # it up by UUID. Keep the characteristic objects and use those.
+            self._write_char = write_char
+            self._notify_char = _find_characteristic(
+                self._client.services, FRIDGE_NOTIFY_UUID, ("notify", "indicate")
+            )
 
             if not write_char:
+                # Log the GATT layout so an unsupported model can be reported.
                 _LOGGER.error(
-                    "Write characteristic %s not found!", FRIDGE_RW_CHARACTERISTIC_UUID
+                    "Write characteristic %s not found! Services seen: %s",
+                    FRIDGE_RW_CHARACTERISTIC_UUID,
+                    _describe_services(self._client.services),
                 )
                 await self.disconnect()
                 return False
@@ -440,7 +483,7 @@ class FridgeApi:
                 return False
 
             await self._client.start_notify(
-                FRIDGE_NOTIFY_UUID, self._notification_handler
+                self._notify_char or FRIDGE_NOTIFY_UUID, self._notification_handler
             )
 
         except BleakError as e:
@@ -476,6 +519,7 @@ class FridgeApi:
     async def disconnect(self):
         """Disconnect from the fridge."""
         client, self._client = self._client, None
+        self._write_char = self._notify_char = None
         if client and client.is_connected:
             await client.disconnect()
 
@@ -516,7 +560,7 @@ class FridgeApi:
                 if index:
                     await asyncio.sleep(WRITE_CHUNK_DELAY)
                 await self._client.write_gatt_char(
-                    FRIDGE_RW_CHARACTERISTIC_UUID,
+                    self._write_char or FRIDGE_RW_CHARACTERISTIC_UUID,
                     chunk,
                     response=self._write_requires_response,
                 )

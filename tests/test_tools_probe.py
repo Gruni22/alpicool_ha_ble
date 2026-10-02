@@ -28,6 +28,33 @@ def test_looks_like_fridge(probe) -> None:
     """Known names and the service UUID are recognised."""
     assert probe.looks_like_fridge("WT-0001", [])
     assert probe.looks_like_fridge(None, ["00001234-0000-1000-8000-00805F9B34FB"])
+    # Brevia 24240 advertises 0xAF30.
+    assert probe.looks_like_fridge(None, ["0000af30-0000-1000-8000-00805f9b34fb"])
+
+
+def test_find_characteristic_with_duplicate_services(probe) -> None:
+    """Brevia 24240 lists 0x1234 twice; pick the first usable characteristic."""
+
+    class Char:
+        def __init__(self, uuid: str, properties: list[str]) -> None:
+            self.uuid = uuid
+            self.properties = properties
+
+    class Service:
+        def __init__(self, *chars: Char) -> None:
+            self.characteristics = list(chars)
+
+    read_only = Char(probe.NOTIFY_UUID, ["read"])
+    notify = Char(probe.NOTIFY_UUID, ["notify"])
+    write = Char(probe.WRITE_UUID, ["write-without-response"])
+    services = [
+        Service(write, read_only, notify),
+        Service(Char(probe.NOTIFY_UUID, ["read", "notify"])),
+    ]
+
+    assert probe.find_characteristic(services, probe.NOTIFY_UUID, ("notify",)) is notify
+    assert probe.find_characteristic(services, probe.WRITE_UUID, ("write",)) is write
+    assert probe.find_characteristic([Service(read_only)], probe.NOTIFY_UUID, ("notify",)) is None
     assert not probe.looks_like_fridge("Phone", [])
 
 
