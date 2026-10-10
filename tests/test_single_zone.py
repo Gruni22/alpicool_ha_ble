@@ -1,14 +1,19 @@
-"""Tests for single zone fridges that send a long status (MAENTUM ICECUBE X 50)."""
+"""Tests for single zone fridges that send a long, dual zone shaped status.
+
+Covers the MAENTUM ICECUBE X 50 (-128 in the second zone) and the Alpicool CX
+(second zone all zero).
+"""
 
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.alpicool_ble.api import FridgeApi
+from custom_components.alpicool_ble.api import FridgeApi, has_right_zone
 from custom_components.alpicool_ble.climate import async_setup_entry
 from custom_components.alpicool_ble.const import DOMAIN, Request
 
-from test_api import DUAL_ZONE_PAYLOAD
+from test_api import DUAL_ZONE_PAYLOAD, FakeClient
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -97,3 +102,82 @@ async def test_real_dual_zone_keeps_second_zone() -> None:
 
     await async_setup_entry(hass, entry, added.extend)
     assert [e._zone for e in added] == ["left", "right"]
+
+
+# --- Alpicool CX: dual zone shaped status with the second zone all zero -------
+
+# Query answer of an Alpicool CX (single zone, advertised as "AK1-..."), taken
+# from a Home Assistant debug log on 2026-10-09. 30 payload bytes: the dual
+# zone layout plus two extra bytes, with every second zone field at zero.
+CX_QUERY_ANSWER = bytes.fromhex(
+    "fefe2101000100020314ec0200000000fd0003640e03000000000000000000000100049c"
+)
+
+
+def _cx_api() -> FridgeApi:
+    fridge = FridgeApi(MagicMock(), ADDRESS)
+    fridge._notification_handler(None, bytearray(CX_QUERY_ANSWER))
+    return fridge
+
+
+def test_cx_status_is_decoded() -> None:
+    """The first zone is read normally, the second one is all zero."""
+    status = _cx_api().status
+    assert status["powered_on"] is True
+    assert status["run_mode"] == 0
+    assert status["bat_saver"] == 2
+    assert status["left_target"] == 3
+    assert status["left_current"] == 3
+    assert status["left_ret_diff"] == 2
+    assert (status["temp_min"], status["temp_max"]) == (-20, 20)
+    assert (status["bat_vol_int"], status["bat_vol_dec"]) == (14, 3)
+    assert status["right_current"] == 0
+    assert status["right_ret_diff"] == 0
+
+
+async def test_cx_gets_no_second_zone() -> None:
+    """A second zone that is zero throughout is not a zone."""
+    fridge = _cx_api()
+    added: list = []
+    hass = MagicMock()
+    entry = _entry()
+    hass.data = {DOMAIN: {entry.entry_id: fridge}}
+
+    await async_setup_entry(hass, entry, added.extend)
+    assert [e._zone for e in added] == ["left"]
+    assert added[0]._is_dual_zone is False
+
+
+async def test_cx_set_uses_the_single_zone_payload() -> None:
+    """The CX ignores the 25 byte dual zone SET, so it must get the 14 byte one.
+
+    With the dual zone payload the fridge never answered and power, preset and
+    lock did nothing, while the target temperature (SET_LEFT) kept working.
+    """
+    fridge = _cx_api()
+    fridge._client = FakeClient(mtu_size=23)
+
+    await fridge.async_set_values({"powered_on": False})
+
+    assert fridge._client.writes == [
+        bytes.fromhex("fefe1102000000020314ec0200000000fd000413")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        # No long status at all: plain single zone fridge.
+        ({}, False),
+        # MAENTUM style: the missing zone reports -128.
+        ({"right_current": -128, "right_ret_diff": 1}, False),
+        # Alpicool CX style: the missing zone is zero throughout.
+        ({"right_current": 0, "right_target": 0, "right_ret_diff": 0}, False),
+        # A real zone that happens to sit at 0 degrees still has a hysteresis.
+        ({"right_current": 0, "right_target": 0, "right_ret_diff": 2}, True),
+        ({"right_current": -18}, True),
+    ],
+)
+def test_has_right_zone(status: dict, expected: bool) -> None:
+    """Only a second zone that reports something counts as a zone."""
+    assert has_right_zone(status) is expected
