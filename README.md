@@ -28,6 +28,7 @@ This integration supports !!!untested!!! **both single and dual-zone fridges**.
 
 * For **dual-zone** models, it will create two `climate` entities (`... Left` and `... Right`), which will both become available.
 * For **single-zone** models, only one `climate` entity is created.
+* Single-zone models that still send the long dual-zone status are recognised: either by `-128` as the second zone's temperature (MAENTUM ICECUBE X) or by a second zone that is zero throughout (Alpicool CX, advertised as `AK1-…`).
 
 ***
 ## MAENTUM cooler boxes (Plug-in Festivals GmbH)

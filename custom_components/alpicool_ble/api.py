@@ -32,10 +32,35 @@ _LOGGER = logging.getLogger(__name__)
 # MAENTUM IceCubeX (single zone) sends a 42 byte status with 0x80 there.
 _NO_ZONE_TEMPERATURE = -128
 
+# Status fields that describe the second zone. An Alpicool CX (single zone,
+# advertised as "AK1-...") sends a 30 byte status in the dual zone layout with
+# every one of them at zero.
+_RIGHT_ZONE_FIELDS = (
+    "right_target",
+    "right_ret_diff",
+    "right_tc_hot",
+    "right_tc_mid",
+    "right_tc_cold",
+    "right_tc_halt",
+    "right_current",
+)
+
 
 def has_right_zone(status: dict) -> bool:
-    """Return True if the fridge reported a real second zone."""
-    return status.get("right_current", _NO_ZONE_TEMPERATURE) != _NO_ZONE_TEMPERATURE
+    """Return True if the fridge reported a real second zone.
+
+    Some single zone fridges send the long, dual zone shaped status anyway.
+    They mark the missing zone either with -128 as its temperature or by
+    leaving the whole zone at zero. A real zone is not all zero: its
+    hysteresis alone is at least 1.
+
+    This decides more than the number of climate entities. A single zone
+    fridge ignores the longer dual zone SET command, so power, preset, lock
+    and the other settings only work when the zone count is right.
+    """
+    if status.get("right_current", _NO_ZONE_TEMPERATURE) == _NO_ZONE_TEMPERATURE:
+        return False
+    return any(status.get(field, 0) for field in _RIGHT_ZONE_FIELDS)
 
 
 def _to_signed_byte(b: int) -> int:
